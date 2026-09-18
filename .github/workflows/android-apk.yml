@@ -14,60 +14,78 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout engine
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Java 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android build tools
+      - name: Install Android SDK packages
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
+          set -e
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Install image tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick zip unzip
-
-      - name: Gradle
+      - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: Prepare project and icon
+      - name: Install ZIP and SVG tools
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y zip unzip librsvg2-bin
+
+      - name: Prepare bundled project
+        shell: bash
         env:
           PROJECT_ZIP: ${{ inputs.project_zip }}
-          REPO: ${{ github.repository }}
         run: |
           set -e
           mkdir -p app/src/main/assets app/src/main/res/drawable
 
-          if [ "$PROJECT_ZIP" = "projects/inbox/current-project.zip" ] && [ ! -f "$PROJECT_ZIP" ]; then
-            (cd samples/3d-racing && zip -qr ../../app/src/main/assets/project.zip .)
+          if [ -z "$PROJECT_ZIP" ] || [ "$PROJECT_ZIP" = "projects/inbox/current-project.zip" ]; then
+            if [ -f "$PROJECT_ZIP" ]; then
+              cp "$PROJECT_ZIP" app/src/main/assets/project.zip
+            else
+              (cd samples/3d-racing && zip -qr ../../app/src/main/assets/project.zip .)
+            fi
           else
+            test -f "$PROJECT_ZIP"
             cp "$PROJECT_ZIP" app/src/main/assets/project.zip
           fi
 
-          rm -f app/src/main/res/drawable/ic_project_icon.png app/src/main/res/drawable/ic_project_icon.xml
+      - name: Prepare project icon
+        shell: bash
+        run: |
+          set -e
+          rm -f app/src/main/res/drawable/ic_project_icon.png
+          rm -f app/src/main/res/drawable/ic_project_icon.xml
 
           ICON_PATH=$(unzip -Z1 app/src/main/assets/project.zip | grep -E '(^|/)project\.json$' | head -n 1 || true)
           DECLARED_ICON=""
+
           if [ -n "$ICON_PATH" ]; then
             TMP_JSON=$(mktemp)
             unzip -p app/src/main/assets/project.zip "$ICON_PATH" > "$TMP_JSON"
             DECLARED_ICON=$(python3 - "$TMP_JSON" <<'PY'
-import json,sys
+import json
+import sys
 try:
-    d=json.load(open(sys.argv[1],encoding='utf-8'))
-    print(d.get("icon",""))
+    with open(sys.argv[1], encoding="utf-8") as f:
+        data = json.load(f)
+    print(data.get("icon", ""))
 except Exception:
     print("")
 PY
@@ -75,10 +93,9 @@ PY
             rm -f "$TMP_JSON"
           fi
 
+          ICON_FOUND=""
           if [ -n "$DECLARED_ICON" ]; then
             ICON_FOUND=$(unzip -Z1 app/src/main/assets/project.zip | grep -Fx "$DECLARED_ICON" | head -n 1 || true)
-          else
-            ICON_FOUND=""
           fi
 
           if [ -z "$ICON_FOUND" ]; then
@@ -91,7 +108,7 @@ PY
             ICON_SVG=$(unzip -Z1 app/src/main/assets/project.zip | grep -E '(^|/)icon\.svg$' | head -n 1 || true)
             if [ -n "$ICON_SVG" ]; then
               unzip -p app/src/main/assets/project.zip "$ICON_SVG" > /tmp/icon.svg
-              convert /tmp/icon.svg -resize 512x512 app/src/main/res/drawable/ic_project_icon.png
+              rsvg-convert -w 512 -h 512 /tmp/icon.svg -o app/src/main/res/drawable/ic_project_icon.png
             else
               cat > app/src/main/res/drawable/ic_project_icon.xml <<'EOF'
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -102,16 +119,20 @@ PY
     <path android:fillColor="#101820" android:pathData="M0,0h108v108h-108z"/>
     <path android:fillColor="#56D6FF" android:pathData="M18,14h72v72h-72z"/>
     <path android:fillColor="#101820" android:pathData="M31,66L36,42L45,28H63L72,42L77,66H31z"/>
-  </vector>
+</vector>
 EOF
             fi
           fi
 
       - name: Build release APK
-        run: gradle --no-daemon assembleRelease
+        shell: bash
+        run: |
+          set -e
+          gradle --no-daemon --stacktrace assembleRelease
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: SirinEngine-APK
           path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
