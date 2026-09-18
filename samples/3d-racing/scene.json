@@ -1,0 +1,12 @@
+{
+  "mode": "3d",
+  "renderer": "webgl",
+  "orientation": "landscape",
+  "camera": {"type": "perspective", "fov": 70},
+  "objects": [
+    {"name":"Track","type":"road"},
+    {"name":"PlayerCar","type":"car"},
+    {"name":"Traffic","type":"traffic","count":4}
+  ],
+  "controls": {"left":"touch","right":"touch","nitro":"touch"}
+}
