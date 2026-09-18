@@ -1,0 +1,29 @@
+name: Build Sirin Engine APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with Godot
+        uses: firebelley/godot-ci@v5
+        with:
+          godot_version: 4.3.0
+          godot_command: godot
+          export_template: true
+
+      - name: Export Android APK
+        run: |
+          mkdir -p build
+          godot --headless --path . --export-release "Android" build/SirinEngine.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SirinEngine-APK
+          path: build/SirinEngine.apk
