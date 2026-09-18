@@ -104,14 +104,18 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          APK="app/build/outputs/apk/release/app-release.apk"
+          echo "APK files produced by Gradle:"
+          find app/build/outputs -type f -name "*.apk" -print
+          APK="$(find app/build/outputs -type f -name "*.apk" | head -n 1)"
+          test -n "$APK"
           test -s "$APK"
           file "$APK"
           ls -lh "$APK"
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: SirinEngine-APK
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/**/*.apk
           if-no-files-found: error
