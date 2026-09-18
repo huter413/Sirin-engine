@@ -1,0 +1,8 @@
+{
+  "name": "Sirin Turbo Track",
+  "version": "1.0",
+  "entry": "main.html",
+  "mode": "3d",
+  "icon": "icon.svg",
+  "orientation": "landscape"
+}
