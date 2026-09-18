@@ -9,6 +9,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.provider.MediaStore;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.text.InputType;
 import android.view.*;
 import android.webkit.*;
@@ -43,7 +45,7 @@ public class MainActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        buildHome();
+        if (hasBundledProject()) buildBundledRuntime(); else buildHome();
     }
 
     private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
@@ -73,7 +75,7 @@ public class MainActivity extends Activity {
         return root;
     }
 
-    private void buildHome() {
+    private boolean hasBundledProject() {\n        try { return Arrays.asList(getAssets().list("")).contains("project.zip"); } catch(Exception e){ return false; }\n    }\n\n    private void buildBundledRuntime() {\n        try {\n            File z = new File(getCacheDir(), "bundled-project.zip");\n            try (InputStream in = getAssets().open("project.zip"); OutputStream out = new FileOutputStream(z)) {\n                byte[] b = new byte[8192]; int n; while((n=in.read(b))>0) out.write(b,0,n);\n            }\n            selectedZip=z; projectDir=new File(getCacheDir(), "bundled_project"); deleteRecursive(projectDir); projectDir.mkdirs();\n            unzipSafely(z, projectDir); readProjectMetadata();\n            WebView w=new WebView(this); WebSettings ws=w.getSettings(); ws.setJavaScriptEnabled(true); ws.setAllowFileAccess(true); ws.setAllowContentAccess(true); ws.setDomStorageEnabled(true);\n            setContentView(w);\n            File entry=new File(projectDir,getEntryFile());\n            if(entry.exists()) w.loadUrl("file://"+entry.getAbsolutePath());\n            else { TextView t=label("Proje giriş dosyası bulunamadı: "+getEntryFile(),18); t.setPadding(dp(24),dp(24),dp(24),dp(24)); setContentView(t); }\n        } catch(Exception e) {\n            TextView t=label("Bundled proje açma hatası: "+e.getMessage(),18); t.setPadding(dp(24),dp(24),dp(24),dp(24)); setContentView(t);\n        }\n    }\n\n    private void buildHome() {
         LinearLayout root = base();
         root.addView(label("SIRIN ENGINE", 32));
         TextView sub = label("ZIP → 2D/3D Editor → APK  •  Android  •  YATAY", 16);
@@ -282,7 +284,7 @@ public class MainActivity extends Activity {
         postJson(api,body.toString(),getSecret());
     }
 
-    private void waitForBuildAndDownload() throws Exception{
+    private void waitForBuildAndDownload(long previousRun) throws Exception{
         String repo=getRepo(); long started=System.currentTimeMillis();
         while(System.currentTimeMillis()-started < 15*60*1000){
             Thread.sleep(5000);
@@ -290,7 +292,7 @@ public class MainActivity extends Activity {
             JSONArray arr=runs.optJSONArray("workflow_runs"); if(arr==null)continue;
             for(int i=0;i<arr.length();i++){
                 JSONObject r=arr.getJSONObject(i); String status=r.optString("status"); String conclusion=r.optString("conclusion");
-                if("completed".equals(status) && "success".equals(conclusion)){
+                if(r.optLong("id")!=previousRun && "completed".equals(status) && "success".equals(conclusion)){
                     long id=r.getLong("id"); downloadArtifact(repo,id); return;
                 }
             }
