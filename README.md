@@ -1,25 +1,35 @@
 # Sirin Engine
 
-Sirin Engine is a native Android mobile project manager. It is **not a Godot project**.
+Native Android mobile project-to-APK tool. **No Godot project skeleton.**
 
-## Current build
+## App flow
 
-- Native Android app
-- Forced landscape orientation
-- Touch-friendly controls
-- ZIP project picker
-- Project validation entry point
-- APK build entry point
-- Hardware acceleration
-- Screen kept active while the app is open
-- ARM64-compatible Android build configuration
+1. Open a Sirin ZIP.
+2. The ZIP is unpacked locally.
+3. Use **2D Editor** or **3D Editor**.
+4. Tap **▶ Oyun Oyna** to test the project.
+5. JavaScript, console, WebView and HTTP errors are collected in **⚠ Hata Paneli**.
+6. Tap **🚀 APK Derle**. The ZIP is uploaded to the configured GitHub repository and GitHub Actions builds the release APK.
+7. After a successful build, Android's document saver opens with the APK filename ready. On modern Android, broad storage permission is not needed for this system picker. Save the file under **Download**.
 
-## APK
+## Project ZIP format
 
-GitHub Actions builds the app automatically on pushes to `main` and also supports manual workflow runs. The APK is published as the `SirinEngine-APK` workflow artifact.
+Required:
+- project.json
+- main.html
 
-## Important
+Optional:
+- scene.json
+- icon.png
+- icon.svg
+- other assets
 
-A normal Android APK cannot safely compile every arbitrary ZIP project entirely by itself. A real compiler/build environment is required. Sirin Engine therefore provides the mobile project interface while the actual Android APK build runs in the CI build environment.
+The build reads the icon declared by project.json first, then icon.png, then icon.svg, and finally uses the built-in Sirin icon.
 
-The app does not deliberately run a destructive CPU/GPU stress loop or force the phone to overheat.
+## Included sample
+
+The repository contains **samples/3d-racing**, a touch-controlled WebGL 3D racing sample with traffic and N2O. The matching ZIP is supplied separately.
+
+## Build
+
+GitHub Actions workflow: **Build Sirin Engine APK**.
