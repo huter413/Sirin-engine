@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Sirin Turbo Track</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071018;color:#fff;font-family:system-ui,sans-serif;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none}
+#top{display:flex;justify-content:space-between;padding:14px 18px;font-weight:800;text-shadow:0 2px 4px #000}
+#touch{position:absolute;left:0;right:0;bottom:16px;display:flex;justify-content:space-between;padding:0 18px;pointer-events:auto}
+.pad{display:flex;gap:10px}
+button{width:82px;height:70px;border:0;border-radius:18px;background:rgba(20,30,42,.78);color:#fff;font-size:28px;font-weight:900;box-shadow:0 7px 18px #0008}
+#nitro{position:absolute;right:18px;bottom:100px;width:120px}
+#msg{text-align:center;opacity:.8;font-size:13px;margin-top:3px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="top"><div>SIRIN TURBO TRACK</div><div id="score">0 km/h • 0 tur</div></div>
+  <div id="touch">
+    <div class="pad"><button id="left">◀</button><button id="right">▶</button></div>
+    <button id="nitro">N₂O</button>
+    <div id="msg">Dokunmatik sürüş • yatay ekran</div>
+  </div>
+</div>
+<script>
+const c=document.getElementById('c'),g=c.getContext('2d'); let W,H,dpr=1;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';g.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+
+let steer=0, nitro=0, speed=0, lane=0, distance=0, lap=0, t=0;
+let downL=false,downR=false;
+function bind(id,fn){const b=document.getElementById(id);['touchstart','mousedown'].forEach(e=>b.addEventListener(e,ev=>{ev.preventDefault();fn(true)}));['touchend','mouseup','touchcancel','mouseleave'].forEach(e=>b.addEventListener(e,ev=>{ev.preventDefault();fn(false)}))}
+bind('left',v=>downL=v);bind('right',v=>downR=v);bind('nitro',v=>nitro=v);
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft')downL=true;if(e.key==='ArrowRight')downR=true;if(e.key==='Shift')nitro=true});
+addEventListener('keyup',e=>{if(e.key==='ArrowLeft')downL=false;if(e.key==='ArrowRight')downR=false;if(e.key==='Shift')nitro=false});
+
+const cars=[{z:.34,l:-.62},{z:.56,l:.58},{z:.72,l:-.25},{z:.88,l:.28}];
+function roadY(z){return H*.42 + Math.pow(z,1.85)*H*.7}
+function roadHalf(z){return 32 + Math.pow(z,1.45)*W*.42}
+function drawCar(x,y,s,enemy=false){
+  g.save();g.translate(x,y);g.scale(s,s);
+  g.fillStyle=enemy?'#ffc247':'#56d6ff';
+  g.beginPath();g.moveTo(-38,25);g.lineTo(-29,-6);g.lineTo(-18,-27);g.lineTo(18,-27);g.lineTo(29,-6);g.lineTo(38,25);g.closePath();g.fill();
+  g.fillStyle='#0d1620';g.fillRect(-16,-18,32,15);
+  g.fillStyle='#111';g.fillRect(-34,18,11,10);g.fillRect(23,18,11,10);
+  g.fillStyle='#fff';g.fillRect(-29,5,10,4);g.fillRect(19,5,10,4);
+  g.restore();
+}
+function frame(){
+  t+=.016;
+  const boost=nitro?2.0:1.0;
+  speed+=(180*boost-speed)*.035;
+  distance+=speed*.0009; if(distance>100){distance-=100;lap++}
+  const target=(downL?-1:0)+(downR?1:0); lane+=(target-lane)*.12;
+
+  g.clearRect(0,0,W,H);
+  const sky=g.createLinearGradient(0,0,0,H*.62);sky.addColorStop(0,'#152d4a');sky.addColorStop(1,'#77a9d1');g.fillStyle=sky;g.fillRect(0,0,W,H*.62);
+  g.fillStyle='#2d553a';g.fillRect(0,H*.42,W,H*.58);
+
+  for(let i=0;i<24;i++){
+    const z=(i/24+(distance*.025))%1;
+    const y=roadY(z), hw=roadHalf(z);
+    g.fillStyle=i%2?'#dfe4ea':'#b93a46';g.fillRect(W/2-hw,y,Math.max(4,hw*.06),8);
+    g.fillStyle='#444';g.beginPath();g.moveTo(W/2-hw,y);g.lineTo(W/2+hw,y);g.lineTo(W/2+hw*.96,y+8);g.lineTo(W/2-hw*.96,y+8);g.closePath();g.fill();
+  }
+  g.fillStyle='#30343b';
+  g.beginPath();g.moveTo(W/2-W*.02,H*.42);g.lineTo(W/2+W*.02,H*.42);g.lineTo(W,H);g.lineTo(0,H);g.closePath();g.fill();
+
+  for(let i=cars.length-1;i>=0;i--){
+    const car=cars[i]; car.z-=speed*.00045; if(car.z<.06){car.z=1;car.l=(Math.random()*2-1)*.7}
+    const z=car.z, x=W/2+car.l*roadHalf(z), y=roadY(z)-8, sc=.18+z*.75;
+    drawCar(x,y,sc,true);
+  }
+  const px=W/2+lane*roadHalf(.99),py=H*.79;drawCar(px,py,1.05,false);
+  if(nitro){g.strokeStyle='#7df3ff';g.lineWidth=6;for(let i=0;i<8;i++){const x=px+(Math.random()-.5)*26;g.beginPath();g.moveTo(x,py+28);g.lineTo(x,py+70+Math.random()*25);g.stroke()}}
+  document.getElementById('score').textContent=Math.round(speed*1.25)+' km/h • '+lap+' tur';
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
