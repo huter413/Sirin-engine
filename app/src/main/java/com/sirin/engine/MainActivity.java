@@ -559,7 +559,7 @@ public class MainActivity extends Activity {
     private long latestRunId() throws Exception {
         JSONObject o = new JSONObject(getJson(
             "https://api.github.com/repos/" + getRepo() +
-            "/actions/workflows/android-apk.yml/runs?event=workflow_dispatch&per_page=1",
+            "/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=1",
             getSecret()
         ));
         JSONArray a = o.optJSONArray("workflow_runs");
@@ -587,7 +587,7 @@ public class MainActivity extends Activity {
     }
 
     private void dispatchBuild() throws Exception {
-        String url = "https://api.github.com/repos/" + getRepo() + "/actions/workflows/android-apk.yml/dispatches";
+        String url = "https://api.github.com/repos/" + getRepo() + "/actions/workflows/build.yml/dispatches";
         JSONObject body = new JSONObject();
         body.put("ref", "main");
         postJson(url, body.toString(), getSecret());
@@ -600,7 +600,7 @@ public class MainActivity extends Activity {
 
             JSONObject runs = new JSONObject(getJson(
                 "https://api.github.com/repos/" + getRepo() +
-                "/actions/workflows/android-apk.yml/runs?event=workflow_dispatch&per_page=10",
+                "/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=10",
                 getSecret()
             ));
 
@@ -731,7 +731,7 @@ public class MainActivity extends Activity {
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
-                .replace(""", "&quot;");
+                .replace("\"", "&quot;");
     }
 
     private void copyUriToFile(Uri uri, File out) throws Exception {
