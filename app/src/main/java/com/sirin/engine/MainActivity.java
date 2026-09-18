@@ -1,109 +1,175 @@
 package com.sirin.engine;
 
-import android.Manifest;
-import android.app.*;
-import android.os.*;
-import android.content.*;
+import android.app.Activity;
+import android.os.Bundle;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
-import android.provider.MediaStore;
+import android.provider.DocumentsContract;
+import android.text.InputType;
+import android.view.View;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.widget.*;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.text.InputType;
-import android.view.*;
-import android.webkit.*;
-import android.widget.*;
-import android.database.Cursor;
+
 import java.io.*;
-import java.net.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.security.*;
-import java.security.spec.AlgorithmParameterSpec;
+import java.security.KeyStore;
 import java.util.*;
-import java.util.zip.*;
-import javax.crypto.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import org.json.*;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final int PICK_ZIP = 41;
     private static final int CREATE_APK = 42;
-    private static final int STORAGE_PERMISSION = 43;
     private static final String PREFS = "sirin";
+    private static final String KEY_ALIAS = "sirin_token_key";
+
     private TextView status;
     private WebView preview;
     private File projectDir;
     private File selectedZip;
     private String projectName = "Sirin Project";
-    private String githubRepo = "huter413/Sirin-engine";
+    private String entryFile = "main.html";
 
-    @Override public void onCreate(Bundle state) {
+    @Override
+    public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().setFlags(1024, 1024);
+        getWindow().addFlags(128);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (hasBundledProject()) buildBundledRuntime(); else buildHome();
+        if (hasBundledProject()) {
+            buildBundledRuntime();
+        } else {
+            buildHome();
+        }
     }
 
-    private int dp(int n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
-
-    private Button btn(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(16);
-        b.setAllCaps(false);
-        b.setMinHeight(dp(64));
-        return b;
-    }
-
-    private TextView label(String text, float size) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(size);
-        return t;
+    private int dp(int n) {
+        return (int) (n * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private LinearLayout base() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(24), dp(18), dp(24), dp(18));
-        root.setBackgroundColor(Color.rgb(10,14,20));
+        root.setPadding(dp(22), dp(16), dp(22), dp(16));
+        root.setBackgroundColor(Color.rgb(10, 14, 20));
         return root;
     }
 
-    private boolean hasBundledProject() {\n        try { return Arrays.asList(getAssets().list("")).contains("project.zip"); } catch(Exception e){ return false; }\n    }\n\n    private void buildBundledRuntime() {\n        try {\n            File z = new File(getCacheDir(), "bundled-project.zip");\n            try (InputStream in = getAssets().open("project.zip"); OutputStream out = new FileOutputStream(z)) {\n                byte[] b = new byte[8192]; int n; while((n=in.read(b))>0) out.write(b,0,n);\n            }\n            selectedZip=z; projectDir=new File(getCacheDir(), "bundled_project"); deleteRecursive(projectDir); projectDir.mkdirs();\n            unzipSafely(z, projectDir); readProjectMetadata();\n            WebView w=new WebView(this); WebSettings ws=w.getSettings(); ws.setJavaScriptEnabled(true); ws.setAllowFileAccess(true); ws.setAllowContentAccess(true); ws.setDomStorageEnabled(true);\n            setContentView(w);\n            File entry=new File(projectDir,getEntryFile());\n            if(entry.exists()) w.loadUrl("file://"+entry.getAbsolutePath());\n            else { TextView t=label("Proje giriş dosyası bulunamadı: "+getEntryFile(),18); t.setPadding(dp(24),dp(24),dp(24),dp(24)); setContentView(t); }\n        } catch(Exception e) {\n            TextView t=label("Bundled proje açma hatası: "+e.getMessage(),18); t.setPadding(dp(24),dp(24),dp(24),dp(24)); setContentView(t);\n        }\n    }\n\n    private void buildHome() {
+    private TextView text(String value, float size) {
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(size);
+        return v;
+    }
+
+    private Button button(String value) {
+        Button b = new Button(this);
+        b.setText(value);
+        b.setTextSize(16);
+        b.setAllCaps(false);
+        b.setMinHeight(dp(62));
+        return b;
+    }
+
+    private boolean hasBundledProject() {
+        try {
+            String[] files = getAssets().list("");
+            if (files == null) return false;
+            for (String f : files) if ("project.zip".equals(f)) return true;
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private void buildBundledRuntime() {
+        try {
+            File z = new File(getCacheDir(), "bundled-project.zip");
+            try (InputStream in = getAssets().open("project.zip");
+                 OutputStream out = new FileOutputStream(z)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+            selectedZip = z;
+            projectDir = new File(getCacheDir(), "bundled_project");
+            deleteRecursive(projectDir);
+            if (!projectDir.mkdirs()) throw new IOException("Proje klasörü oluşturulamadı");
+            unzipSafely(z, projectDir);
+            readProjectMetadata();
+
+            WebView w = new WebView(this);
+            configureWebView(w);
+            setContentView(w);
+
+            File entry = new File(projectDir, entryFile);
+            if (entry.exists()) {
+                w.loadUrl(Uri.fromFile(entry).toString());
+            } else {
+                setContentView(text("Giriş dosyası bulunamadı: " + entryFile, 18));
+            }
+        } catch (Exception e) {
+            setContentView(text("Proje çalıştırma hatası: " + e.getMessage(), 18));
+        }
+    }
+
+    private void configureWebView(WebView w) {
+        WebSettings s = w.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        w.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+    }
+
+    private void buildHome() {
         LinearLayout root = base();
-        root.addView(label("SIRIN ENGINE", 32));
-        TextView sub = label("ZIP → 2D/3D Editor → APK  •  Android  •  YATAY", 16);
+        root.addView(text("SIRIN ENGINE", 32));
+        TextView sub = text("ZIP → 2D / 3D Editör → APK  •  Android  •  LANDSCAPE", 16);
         sub.setTextColor(Color.LTGRAY);
         root.addView(sub);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
 
-        Button open = btn("📦  Proje ZIP Aç");
+        Button open = button("📦  ZIP Aç");
         open.setOnClickListener(v -> pickZip());
         row.addView(open, new LinearLayout.LayoutParams(0, dp(72), 1));
 
-        Button settings = btn("⚙  Ayarlar");
+        Button settings = button("⚙  Ayarlar");
         settings.setOnClickListener(v -> showSettings());
         row.addView(settings, new LinearLayout.LayoutParams(0, dp(72), 1));
 
-        Button build = btn("🚀  APK Derle");
+        Button build = button("🚀  APK Derle");
         build.setOnClickListener(v -> startBuild());
         row.addView(build, new LinearLayout.LayoutParams(0, dp(72), 1));
-
         root.addView(row);
 
-        status = label("Durum: Hazır\nZIP: Seçilmedi\nÇıkış: Android APK\nEkran: Yatay\nEditör: 2D / 3D", 17);
-        status.setPadding(0, dp(18), 0, 0);
+        status = text("Durum: Hazır\nZIP: Seçilmedi\nEditör: 2D / 3D\nAPK: GitHub Actions + Download", 17);
+        status.setPadding(0, dp(20), 0, 0);
         root.addView(status, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView help = label("ZIP içinde project.json + main.html + icon.png/icon.svg kullanılabilir. APK ikonu ZIP içinden alınır.", 14);
+        TextView help = text(
+            "Sirin ZIP biçimi: project.json + main.html.\n" +
+            "icon.png veya icon.svg varsa derlenen APK'nın launcher ikonuna dönüştürülür.",
+            14
+        );
         help.setTextColor(Color.GRAY);
         root.addView(help);
         setContentView(root);
@@ -116,251 +182,537 @@ public class MainActivity extends Activity {
         startActivityForResult(i, PICK_ZIP);
     }
 
-    @Override protected void onActivityResult(int req, int result, Intent data) {
+    @Override
+    protected void onActivityResult(int req, int result, Intent data) {
         super.onActivityResult(req, result, data);
+
         if (req == PICK_ZIP && result == RESULT_OK && data != null) {
-            Uri u = data.getData();
             try {
                 selectedZip = new File(getCacheDir(), "selected-project.zip");
-                copyUriToFile(u, selectedZip);
+                copyUriToFile(data.getData(), selectedZip);
                 projectDir = new File(getCacheDir(), "sirin_project");
                 deleteRecursive(projectDir);
-                if (!projectDir.mkdirs()) throw new IOException("Klasör oluşturulamadı");
+                if (!projectDir.mkdirs()) throw new IOException("Proje klasörü oluşturulamadı");
                 unzipSafely(selectedZip, projectDir);
                 readProjectMetadata();
-                setStatus("ZIP açıldı: " + projectName + "\nEditör hazır.");
                 showEditor();
             } catch (Exception e) {
                 setStatus("ZIP hatası: " + e.getMessage());
             }
         }
+
         if (req == CREATE_APK && result == RESULT_OK && data != null) {
             File built = new File(getCacheDir(), "SirinEngine-APK.apk");
             try (InputStream in = new FileInputStream(built);
                  OutputStream out = getContentResolver().openOutputStream(data.getData())) {
-                byte[] buf = new byte[8192]; int n;
-                while ((n = in.read(buf)) > 0) out.write(buf,0,n);
-                Toast.makeText(this, "APK kaydedildi.", Toast.LENGTH_LONG).show();
-            } catch (Exception e) { setStatus("APK kaydetme hatası: " + e.getMessage()); }
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                Toast.makeText(this, "APK Downloads/seçilen klasöre kaydedildi.", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                setStatus("APK kaydetme hatası: " + e.getMessage());
+            }
         }
     }
 
     private void showEditor() {
         LinearLayout root = base();
+
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
-        Button back = btn("← Ana Sayfa"); back.setOnClickListener(v -> buildHome());
-        top.addView(back, new LinearLayout.LayoutParams(dp(150), dp(58)));
-        Button b2 = btn("2D Editor"); b2.setOnClickListener(v -> show2DEditor());
+
+        Button back = button("← Ana");
+        back.setOnClickListener(v -> buildHome());
+        top.addView(back, new LinearLayout.LayoutParams(dp(120), dp(58)));
+
+        Button b2 = button("2D Editör");
+        b2.setOnClickListener(v -> show2DEditor());
         top.addView(b2, new LinearLayout.LayoutParams(0, dp(58), 1));
-        Button b3 = btn("3D Editor"); b3.setOnClickListener(v -> show3DEditor());
+
+        Button b3 = button("3D Editör");
+        b3.setOnClickListener(v -> show3DEditor());
         top.addView(b3, new LinearLayout.LayoutParams(0, dp(58), 1));
-        Button files = btn("Dosyalar");
+
+        Button files = button("Dosyalar");
         files.setOnClickListener(v -> showFiles());
         top.addView(files, new LinearLayout.LayoutParams(0, dp(58), 1));
-        Button settings = btn("Ayarlar"); settings.setOnClickListener(v -> showSettings());
+
+        Button settings = button("Ayarlar");
+        settings.setOnClickListener(v -> showSettings());
         top.addView(settings, new LinearLayout.LayoutParams(0, dp(58), 1));
+
         root.addView(top);
-        status = label("Proje: " + projectName + "\n3D Editor önizlemesi hazır.", 16);
+        status = text("Proje: " + projectName + "\nGiriş: " + entryFile, 16);
         root.addView(status);
+
         preview = new WebView(this);
-        WebSettings ws = preview.getSettings();
-        ws.setJavaScriptEnabled(true);
-        ws.setAllowFileAccess(true);
-        ws.setAllowContentAccess(true);
-        ws.setDomStorageEnabled(true);
-        root.addView(preview, new LinearLayout.LayoutParams(-1,0,1));
+        configureWebView(preview);
+        root.addView(preview, new LinearLayout.LayoutParams(-1, 0, 1));
+
         setContentView(root);
         show3DEditor();
     }
 
     private void show2DEditor() {
         if (preview == null) return;
-        String html = "<html><body style='margin:0;background:#101720;color:#fff;font-family:sans-serif'>" +
-                "<div style='padding:12px'>2D SAHNE EDİTÖRÜ • " + esc(projectName) + "</div>" +
-                "<canvas id='c' width='1200' height='600' style='width:100%;background:#182432'></canvas>" +
-                "<script>let c=document.getElementById('c'),x=c.getContext('2d');" +
-                "x.strokeStyle='#34495e';for(let i=0;i<1200;i+=50){x.beginPath();x.moveTo(i,0);x.lineTo(i,600);x.stroke()}for(let i=0;i<600;i+=50){x.beginPath();x.moveTo(0,i);x.lineTo(1200,i);x.stroke()}" +
-                "x.fillStyle='#56d6ff';x.fillRect(500,230,200,100);x.fillStyle='#fff';x.fillText('Sahne alanı',550,285);</script></body></html>";
+        String title = esc(projectName);
+        String html =
+            "<!doctype html><html><body style='margin:0;background:#101720;color:#fff;font-family:sans-serif'>" +
+            "<div style='padding:12px;font-weight:bold'>2D SAHNE EDİTÖRÜ • " + title + "</div>" +
+            "<canvas id='c' width='1200' height='620' style='width:100%;height:calc(100vh - 50px)'></canvas>" +
+            "<script>" +
+            "const c=document.getElementById('c'),x=c.getContext('2d');" +
+            "x.fillStyle='#182432';x.fillRect(0,0,c.width,c.height);" +
+            "x.strokeStyle='#33495e';for(let i=0;i<c.width;i+=50){x.beginPath();x.moveTo(i,0);x.lineTo(i,c.height);x.stroke()}" +
+            "for(let i=0;i<c.height;i+=50){x.beginPath();x.moveTo(0,i);x.lineTo(c.width,i);x.stroke()}" +
+            "x.fillStyle='#56d6ff';x.fillRect(500,240,200,110);" +
+            "x.fillStyle='#fff';x.font='26px sans-serif';x.fillText('Sirin 2D Sahne',520,305);" +
+            "</script></body></html>";
         preview.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        setStatus("2D Editör açık.");
     }
 
     private void show3DEditor() {
-        if (projectDir == null || preview == null) return;
-        File entry = new File(projectDir, getEntryFile());
-        if (entry.exists()) preview.loadUrl("file://" + entry.getAbsolutePath());
-        else show2DEditor();
-    }
-
-    private String getEntryFile() {
-        try {
-            JSONObject o = new JSONObject(readText(new File(projectDir,"project.json")));
-            return o.optString("entry","main.html");
-        } catch(Exception e) { return "main.html"; }
+        if (preview == null || projectDir == null) return;
+        File entry = new File(projectDir, entryFile);
+        if (entry.exists()) {
+            preview.loadUrl(Uri.fromFile(entry).toString());
+            setStatus("3D Editör / oyun önizlemesi açık.");
+        } else {
+            show2DEditor();
+        }
     }
 
     private void showFiles() {
         if (projectDir == null) return;
-        LinearLayout root=base();
-        LinearLayout top=new LinearLayout(this); top.setOrientation(LinearLayout.HORIZONTAL);
-        Button back=btn("← Editör"); back.setOnClickListener(v -> showEditor()); top.addView(back,new LinearLayout.LayoutParams(dp(160),dp(58)));
-        root.addView(top);
-        TextView list=label("PROJE DOSYALARI\n\n"+listFiles(projectDir, ""),16);
-        root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout root = base();
+        Button back = button("← Editöre dön");
+        back.setOnClickListener(v -> showEditor());
+        root.addView(back, new LinearLayout.LayoutParams(-1, dp(58)));
+        root.addView(text("PROJE DOSYALARI\n\n" + listFiles(projectDir, ""), 16),
+            new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
     }
 
-    private String listFiles(File d,String p){
-        StringBuilder s=new StringBuilder();
-        File[] fs=d.listFiles(); if(fs==null)return "";
-        Arrays.sort(fs);
-        for(File f:fs){ if(f.isDirectory())s.append(p+"📁 "+f.getName()+"\n"); else s.append(p+"📄 "+f.getName()+"  ("+f.length()+" B)\n"); if(f.isDirectory())s.append(listFiles(f,p+"  "));}
-        return s.toString();
+    private String listFiles(File dir, String prefix) {
+        StringBuilder out = new StringBuilder();
+        File[] files = dir.listFiles();
+        if (files == null) return "";
+        Arrays.sort(files, Comparator.comparing(File::getName));
+        for (File f : files) {
+            out.append(prefix).append(f.isDirectory() ? "📁 " : "📄 ")
+               .append(f.getName()).append("\n");
+            if (f.isDirectory()) out.append(listFiles(f, prefix + "  "));
+        }
+        return out.toString();
     }
 
     private void showSettings() {
-        final EditText repo=new EditText(this); repo.setText(getRepo()); repo.setHint("owner/repo");
-        final EditText token=new EditText(this); token.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD); token.setHint("GitHub token");
-        new AlertDialog.Builder(this).setTitle("Sirin Engine Ayarları")
-            .setMessage("APK bulut derlemesi için GitHub token gerekir. Gerekli izinler: Contents yazma + Actions yazma/okuma.")
-            .setView(makeSettingsView(repo,token))
-            .setPositiveButton("Kaydet", (d,w)->{ saveRepo(repo.getText().toString().trim()); if(!token.getText().toString().trim().isEmpty()) saveSecret(token.getText().toString().trim()); setStatus("Ayarlar kaydedildi.");})
-            .setNegativeButton("İptal",null).show();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), 0, dp(20), 0);
+
+        EditText repo = new EditText(this);
+        repo.setText(getRepo());
+        repo.setHint("owner/repo");
+        box.addView(repo);
+
+        EditText token = new EditText(this);
+        token.setHint("GitHub token");
+        token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(token);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Sirin Engine Ayarları")
+            .setMessage(
+                "Gerçek APK derlemesi GitHub Actions'ta yapılır. " +
+                "Token, yalnızca bu cihazda Android Keystore ile şifrelenir. " +
+                "Gerekli GitHub yetkileri: repository Contents yazma ve Actions çalıştırma."
+            )
+            .setView(box)
+            .setPositiveButton("Kaydet", (d, w) -> {
+                saveRepo(repo.getText().toString().trim());
+                String t = token.getText().toString().trim();
+                if (!t.isEmpty()) saveSecret(t);
+                setStatus("Ayarlar kaydedildi.");
+            })
+            .setNegativeButton("İptal", null)
+            .show();
     }
 
-    private LinearLayout makeSettingsView(EditText repo, EditText token){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(18),0,dp(18),0);
-        box.addView(repo); box.addView(token); return box;
+    private String getRepo() {
+        return getSharedPreferences(PREFS, 0).getString("repo", "huter413/Sirin-engine");
     }
 
-    private String getRepo(){ return getSharedPreferences(PREFS,0).getString("repo",githubRepo); }
-    private void saveRepo(String r){ if(r.contains("/")){githubRepo=r;getSharedPreferences(PREFS,0).edit().putString("repo",r).apply();}}
-    private void saveSecret(String s){ try{
-        KeyStore ks=KeyStore.getInstance("AndroidKeyStore"); ks.load(null);
-        if(!ks.containsAlias("sirin_key")){ KeyGenerator kg=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore"); kg.init(new KeyGenParameterSpec.Builder("sirin_key",KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build()); kg.generateKey();}
-        javax.crypto.Cipher c=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        c.init(javax.crypto.Cipher.ENCRYPT_MODE,((KeyStore.SecretKeyEntry)ks.getEntry("sirin_key",null)).getSecretKey());
-        byte[] iv=c.getIV(), enc=c.doFinal(s.getBytes(StandardCharsets.UTF_8));
-        String joined=Base64.getEncoder().encodeToString(iv)+":"+Base64.getEncoder().encodeToString(enc);
-        getSharedPreferences(PREFS,0).edit().putString("token",joined).apply();
-    }catch(Exception e){ setStatus("Token kaydedilemedi.");}}
-    private String getSecret(){ try{
-        String v=getSharedPreferences(PREFS,0).getString("token",null); if(v==null)return "";
-        String[] a=v.split(":"); byte[] iv=Base64.getDecoder().decode(a[0]),enc=Base64.getDecoder().decode(a[1]);
-        KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
-        SecretKey key=((KeyStore.SecretKeyEntry)ks.getEntry("sirin_key",null)).getSecretKey();
-        javax.crypto.Cipher c=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        c.init(javax.crypto.Cipher.DECRYPT_MODE,key,new GCMParameterSpec(128,iv));
-        return new String(c.doFinal(enc),StandardCharsets.UTF_8);
-    }catch(Exception e){return "";}}
-    
-    private void startBuild(){
-        if(selectedZip==null || projectDir==null){setStatus("Önce bir ZIP proje aç.");return;}
-        if(getSecret().isEmpty()){ showSettings(); setStatus("Önce GitHub tokenını Ayarlar'a ekle."); return; }
+    private void saveRepo(String repo) {
+        if (repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) {
+            getSharedPreferences(PREFS, 0).edit().putString("repo", repo).apply();
+        }
+    }
+
+    private void saveSecret(String secret) {
+        try {
+            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            if (!ks.containsAlias(KEY_ALIAS)) {
+                KeyGenerator kg = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+                );
+                kg.init(new KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT
+                ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                 .build());
+                kg.generateKey();
+            }
+            SecretKey key = ((KeyStore.SecretKeyEntry) ks.getEntry(KEY_ALIAS, null)).getSecretKey();
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.ENCRYPT_MODE, key);
+            String value = Base64.getEncoder().encodeToString(c.getIV()) + ":" +
+                           Base64.getEncoder().encodeToString(c.doFinal(secret.getBytes(StandardCharsets.UTF_8)));
+            getSharedPreferences(PREFS, 0).edit().putString("token", value).apply();
+        } catch (Exception e) {
+            setStatus("Token kaydedilemedi: " + e.getMessage());
+        }
+    }
+
+    private String getSecret() {
+        try {
+            String stored = getSharedPreferences(PREFS, 0).getString("token", "");
+            if (stored.isEmpty()) return "";
+            String[] p = stored.split(":", 2);
+            byte[] iv = Base64.getDecoder().decode(p[0]);
+            byte[] encrypted = Base64.getDecoder().decode(p[1]);
+            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            SecretKey key = ((KeyStore.SecretKeyEntry) ks.getEntry(KEY_ALIAS, null)).getSecretKey();
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
+            return new String(c.doFinal(encrypted), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void startBuild() {
+        if (selectedZip == null || projectDir == null) {
+            setStatus("Önce ZIP proje aç.");
+            return;
+        }
+        if (getSecret().isEmpty()) {
+            showSettings();
+            setStatus("APK derlemesi için GitHub tokenını Ayarlar'a ekle.");
+            return;
+        }
+
         setStatus("ZIP GitHub'a yükleniyor…");
         new Thread(() -> {
-            try{
-                String base=readText(projectFile("project.json"));
-                uploadZipToGitHub();
-                String path=getBuildInputPath();
-                dispatchBuild(path);
-                waitForBuildAndDownload();
-            }catch(Exception e){runOnUiThread(()->setStatus("Derleme hatası: "+e.getMessage()));}
+            try {
+                long previous = latestRunId();
+                uploadZip();
+                dispatchBuild();
+                waitForBuild(previous);
+            } catch (Exception e) {
+                runOnUiThread(() -> setStatus("Derleme hatası: " + e.getMessage()));
+            }
         }).start();
     }
 
-    private String getBuildInputPath(){ return "projects/inbox/" + "current-project.zip"; }
-
-    private void uploadZipToGitHub() throws Exception{
-        byte[] bytes=readBytes(selectedZip); if(bytes.length>15*1024*1024)throw new IOException("ZIP 15 MB sınırını aşıyor.");
-        String repo=getRepo(); String api="https://api.github.com/repos/"+repo+"/contents/"+getBuildInputPath();
-        JSONObject body=new JSONObject(); body.put("message","Sirin Engine: upload project"); body.put("content",Base64.getEncoder().encodeToString(bytes)); body.put("branch","main");
-        putJson(api,body.toString(),getSecret());
+    private String buildPath() {
+        return "projects/inbox/current-project.zip";
     }
 
-    private void dispatchBuild(String zipPath) throws Exception{
-        String repo=getRepo(); String api="https://api.github.com/repos/"+repo+"/actions/workflows/android-apk.yml/dispatches";
-        JSONObject body=new JSONObject(); body.put("ref","main"); JSONObject inputs=new JSONObject(); inputs.put("project_zip",zipPath); body.put("inputs",inputs);
-        postJson(api,body.toString(),getSecret());
+    private long latestRunId() throws Exception {
+        JSONObject o = new JSONObject(getJson(
+            "https://api.github.com/repos/" + getRepo() +
+            "/actions/workflows/android-apk.yml/runs?event=workflow_dispatch&per_page=1",
+            getSecret()
+        ));
+        JSONArray a = o.optJSONArray("workflow_runs");
+        return (a == null || a.length() == 0) ? 0 : a.getJSONObject(0).optLong("id", 0);
     }
 
-    private void waitForBuildAndDownload(long previousRun) throws Exception{
-        String repo=getRepo(); long started=System.currentTimeMillis();
-        while(System.currentTimeMillis()-started < 15*60*1000){
+    private void uploadZip() throws Exception {
+        byte[] bytes = readBytes(selectedZip);
+        if (bytes.length > 15 * 1024 * 1024) throw new IOException("ZIP 15 MB'dan büyük.");
+        String url = "https://api.github.com/repos/" + getRepo() + "/contents/" + buildPath();
+        JSONObject body = new JSONObject();
+        body.put("message", "Sirin Engine: upload project");
+        body.put("content", Base64.getEncoder().encodeToString(bytes));
+        body.put("branch", "main");
+
+        try {
+            putJson(url, body.toString(), getSecret());
+        } catch (IOException ex) {
+            if (!ex.getMessage().contains("HTTP 422")) throw ex;
+            JSONObject existing = new JSONObject(getJson(url, getSecret()));
+            body.put("sha", existing.optString("sha"));
+            putJson(url, body.toString(), getSecret());
+        }
+    }
+
+    private void dispatchBuild() throws Exception {
+        String url = "https://api.github.com/repos/" + getRepo() + "/actions/workflows/android-apk.yml/dispatches";
+        JSONObject body = new JSONObject();
+        body.put("ref", "main");
+        JSONObject inputs = new JSONObject();
+        inputs.put("project_zip", buildPath());
+        body.put("inputs", inputs);
+        postJson(url, body.toString(), getSecret());
+    }
+
+    private void waitForBuild(long previousRun) throws Exception {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < 15 * 60 * 1000L) {
             Thread.sleep(5000);
-            JSONObject runs=new JSONObject(getJson("https://api.github.com/repos/"+repo+"/actions/workflows/android-apk.yml/runs?event=workflow_dispatch&per_page=10",getSecret()));
-            JSONArray arr=runs.optJSONArray("workflow_runs"); if(arr==null)continue;
-            for(int i=0;i<arr.length();i++){
-                JSONObject r=arr.getJSONObject(i); String status=r.optString("status"); String conclusion=r.optString("conclusion");
-                if(r.optLong("id")!=previousRun && "completed".equals(status) && "success".equals(conclusion)){
-                    long id=r.getLong("id"); downloadArtifact(repo,id); return;
+            JSONObject runs = new JSONObject(getJson(
+                "https://api.github.com/repos/" + getRepo() +
+                "/actions/workflows/android-apk.yml/runs?event=workflow_dispatch&per_page=10",
+                getSecret()
+            ));
+            JSONArray a = runs.optJSONArray("workflow_runs");
+            if (a == null) continue;
+
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject r = a.getJSONObject(i);
+                long id = r.optLong("id", 0);
+                if (id == previousRun) continue;
+
+                String state = r.optString("status", "");
+                String conclusion = r.optString("conclusion", "");
+
+                if ("completed".equals(state) && "failure".equals(conclusion)) {
+                    throw new IOException("GitHub Actions derlemesi başarısız.");
+                }
+                if ("completed".equals(state) && "success".equals(conclusion)) {
+                    downloadArtifact(id);
+                    return;
                 }
             }
-            runOnUiThread(()->setStatus("APK CI derleniyor…"));
+            runOnUiThread(() -> setStatus("APK CI derleniyor…"));
         }
-        throw new IOException("Derleme zaman aşımına uğradı.");
+        throw new IOException("Derleme 15 dakikada tamamlanmadı.");
     }
 
-    private void downloadArtifact(String repo,long runId) throws Exception{
-        JSONObject a=new JSONObject(getJson("https://api.github.com/repos/"+repo+"/actions/runs/"+runId+"/artifacts",getSecret()));
-        JSONArray arr=a.optJSONArray("artifacts"); if(arr==null||arr.length()==0)throw new IOException("APK artifact bulunamadı.");
-        long id=arr.getJSONObject(0).getLong("id");
-        byte[] zip=downloadBytes("https://api.github.com/repos/"+repo+"/actions/artifacts/"+id+"/zip",getSecret());
-        File art=new File(getCacheDir(),"artifact.zip"); writeBytes(art,zip);
-        File temp=new File(getCacheDir(),"artifact");deleteRecursive(temp);temp.mkdirs();unzipSafely(art,temp);
-        File apk=findApk(temp); if(apk==null)throw new IOException("APK dosyası bulunamadı.");
-        File out=new File(getCacheDir(),"SirinEngine-APK.apk");copyFile(apk,out);
-        runOnUiThread(()->saveApkPrompt(out));
+    private void downloadArtifact(long runId) throws Exception {
+        String url = "https://api.github.com/repos/" + getRepo() +
+                     "/actions/runs/" + runId + "/artifacts";
+        JSONObject o = new JSONObject(getJson(url, getSecret()));
+        JSONArray a = o.optJSONArray("artifacts");
+        if (a == null || a.length() == 0) throw new IOException("APK artifact bulunamadı.");
+
+        long artifactId = a.getJSONObject(0).optLong("id", 0);
+        byte[] artifactZip = downloadBytes(
+            "https://api.github.com/repos/" + getRepo() +
+            "/actions/artifacts/" + artifactId + "/zip",
+            getSecret()
+        );
+
+        File art = new File(getCacheDir(), "artifact.zip");
+        writeBytes(art, artifactZip);
+        File dir = new File(getCacheDir(), "artifact");
+        deleteRecursive(dir);
+        if (!dir.mkdirs()) throw new IOException("Artifact klasörü oluşturulamadı");
+        unzipSafely(art, dir);
+
+        File apk = findApk(dir);
+        if (apk == null) throw new IOException("APK artifact içinde yok.");
+
+        File local = new File(getCacheDir(), "SirinEngine-APK.apk");
+        copyFile(apk, local);
+        runOnUiThread(() -> saveApkPrompt());
     }
 
-    private void saveApkPrompt(File file){
-        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+    private void saveApkPrompt() {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         i.setType("application/vnd.android.package-archive");
-        i.putExtra(Intent.EXTRA_TITLE,projectName.replaceAll("[^A-Za-z0-9._-]","_")+".apk");
-        startActivityForResult(i,CREATE_APK);
+        i.putExtra(Intent.EXTRA_TITLE, safeFileName(projectName) + ".apk");
+        startActivityForResult(i, CREATE_APK);
     }
 
-    private File findApk(File d){File[]fs=d.listFiles();if(fs==null)return null;for(File f:fs){if(f.isDirectory()){File x=findApk(f);if(x!=null)return x;}else if(f.getName().endsWith(".apk"))return f;}return null;}
-
-    private void readProjectMetadata(){
-        File meta=projectFile("project.json");
-        try{JSONObject o=new JSONObject(readText(meta)); projectName=o.optString("name","Sirin Project");}catch(Exception e){projectName="Sirin Project";}
+    private String safeFileName(String s) {
+        String v = s.replaceAll("[^A-Za-z0-9._-]+", "_");
+        return v.isEmpty() ? "SirinProject" : v;
     }
-    private File projectFile(String p){return new File(projectDir,p);}
-    private void setStatus(String s){runOnUiThread(()->{if(status!=null)status.setText("Durum: "+s);});}
-    private String esc(String s){return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace(""","&quot;");}
 
-    private void copyUriToFile(Uri u,File out)throws Exception{try(InputStream in=getContentResolver().openInputStream(u);OutputStream o=new FileOutputStream(out)){byte[]b=new byte[8192];int n;while((n=in.read(b))>0)o.write(b,0,n);}}
-    private void copyFile(File a,File b)throws Exception{try(InputStream i=new FileInputStream(a);OutputStream o=new FileOutputStream(b)){byte[]x=new byte[8192];int n;while((n=i.read(x))>0)o.write(x,0,n);}}
-    private byte[] readBytes(File f)throws Exception{try(InputStream i=new FileInputStream(f);ByteArrayOutputStream b=new ByteArrayOutputStream()){byte[]x=new byte[8192];int n;while((n=i.read(x))>0)b.write(x,0,n);return b.toByteArray();}}
-    private String readText(File f)throws Exception{return new String(readBytes(f),StandardCharsets.UTF_8);}
-    private void writeBytes(File f,byte[] b)throws Exception{try(OutputStream o=new FileOutputStream(f)){o.write(b);}}
+    private File findApk(File dir) {
+        File[] fs = dir.listFiles();
+        if (fs == null) return null;
+        for (File f : fs) {
+            if (f.isDirectory()) {
+                File x = findApk(f);
+                if (x != null) return x;
+            } else if (f.getName().endsWith(".apk")) {
+                return f;
+            }
+        }
+        return null;
+    }
 
-    private void unzipSafely(File zip,File out)throws Exception{
-        try(ZipInputStream z=new ZipInputStream(new FileInputStream(zip))){
-            ZipEntry e; byte[] buf=new byte[8192];
-            while((e=z.getNextEntry())!=null){
-                File dest=new File(out,e.getName());
-                String root=out.getCanonicalPath()+File.separator;
-                if(!dest.getCanonicalPath().startsWith(root))throw new IOException("Güvensiz ZIP yolu.");
-                if(e.isDirectory()){dest.mkdirs();continue;}
-                File parent=dest.getParentFile();if(parent!=null)parent.mkdirs();
-                try(OutputStream o=new FileOutputStream(dest)){int n;while((n=z.read(buf))>0)o.write(buf,0,n);}
+    private void readProjectMetadata() {
+        File meta = new File(projectDir, "project.json");
+        try {
+            JSONObject o = new JSONObject(readText(meta));
+            projectName = o.optString("name", "Sirin Project");
+            entryFile = o.optString("entry", "main.html");
+        } catch (Exception e) {
+            projectName = "Sirin Project";
+            entryFile = "main.html";
+        }
+    }
+
+    private void setStatus(String s) {
+        runOnUiThread(() -> {
+            if (status != null) status.setText("Durum: " + s);
+        });
+    }
+
+    private String esc(String s) {
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace(""", "&quot;");
+    }
+
+    private void copyUriToFile(Uri uri, File out) throws Exception {
+        InputStream in = getContentResolver().openInputStream(uri);
+        if (in == null) throw new IOException("ZIP okunamadı");
+        try (InputStream src = in; OutputStream dst = new FileOutputStream(out)) {
+            byte[] b = new byte[8192];
+            int n;
+            while ((n = src.read(b)) > 0) dst.write(b, 0, n);
+        }
+    }
+
+    private byte[] readBytes(File file) throws Exception {
+        try (InputStream in = new FileInputStream(file);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] b = new byte[16384];
+            int n;
+            while ((n = in.read(b)) > 0) out.write(b, 0, n);
+            return out.toByteArray();
+        }
+    }
+
+    private String readText(File file) throws Exception {
+        return new String(readBytes(file), StandardCharsets.UTF_8);
+    }
+
+    private void writeBytes(File file, byte[] bytes) throws Exception {
+        try (OutputStream out = new FileOutputStream(file)) {
+            out.write(bytes);
+        }
+    }
+
+    private void copyFile(File from, File to) throws Exception {
+        try (InputStream in = new FileInputStream(from);
+             OutputStream out = new FileOutputStream(to)) {
+            byte[] b = new byte[16384];
+            int n;
+            while ((n = in.read(b)) > 0) out.write(b, 0, n);
+        }
+    }
+
+    private void unzipSafely(File zip, File out) throws Exception {
+        try (ZipInputStream zin = new ZipInputStream(new FileInputStream(zip))) {
+            ZipEntry e;
+            byte[] b = new byte[8192];
+            String root = out.getCanonicalPath() + File.separator;
+
+            while ((e = zin.getNextEntry()) != null) {
+                File dest = new File(out, e.getName());
+                if (!dest.getCanonicalPath().startsWith(root)) {
+                    throw new IOException("Güvensiz ZIP yolu.");
+                }
+                if (e.isDirectory()) {
+                    if (!dest.mkdirs() && !dest.isDirectory())
+                        throw new IOException("Klasör oluşturulamadı");
+                    continue;
+                }
+                File parent = dest.getParentFile();
+                if (parent != null) parent.mkdirs();
+                try (OutputStream outStream = new FileOutputStream(dest)) {
+                    int n;
+                    while ((n = zin.read(b)) > 0) outStream.write(b, 0, n);
+                }
             }
         }
     }
-    private void deleteRecursive(File f){if(f==null||!f.exists())return;File[]fs=f.listFiles();if(fs!=null)for(File x:fs)deleteRecursive(x);f.delete();}
-    
-    private String getJson(String url,String token)throws Exception{ return request(url,"GET",null,token); }
-    private void postJson(String url,String body,String token)throws Exception{ request(url,"POST",body,token); }
-    private void putJson(String url,String body,String token)throws Exception{ request(url,"PUT",body,token); }
-    private String request(String u,String method,String body,String token)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(u).openConnection();c.setRequestMethod(method);c.setConnectTimeout(20000);c.setReadTimeout(30000);c.setRequestProperty("Accept","application/vnd.github+json");c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("User-Agent","SirinEngine");c.setRequestProperty("X-GitHub-Api-Version","2022-11-28");
-        if(body!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");try(OutputStream o=c.getOutputStream()){o.write(body.getBytes(StandardCharsets.UTF_8));}}
-        int code=c.getResponseCode();InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();String s=new String(readAll(in),StandardCharsets.UTF_8);if(code<200||code>=300)throw new IOException("GitHub HTTP "+code+": "+s);return s;
+
+    private void deleteRecursive(File f) {
+        if (f == null || !f.exists()) return;
+        File[] fs = f.listFiles();
+        if (fs != null) for (File x : fs) deleteRecursive(x);
+        f.delete();
     }
-    private byte[] downloadBytes(String u,String token)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(u).openConnection();c.setInstanceFollowRedirects(true);c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("User-Agent","SirinEngine");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("Download HTTP "+code);return readAll(c.getInputStream());
+
+    private String getJson(String url, String token) throws Exception {
+        return request(url, "GET", null, token);
     }
-    private byte[] readAll(InputStream in)throws Exception{try(InputStream x=in;ByteArrayOutputStream b=new ByteArrayOutputStream()){byte[]z=new byte[16384];int n;while((n=x.read(z))>0)b.write(z,0,n);return b.toByteArray();}}
+
+    private void postJson(String url, String body, String token) throws Exception {
+        request(url, "POST", body, token);
+    }
+
+    private void putJson(String url, String body, String token) throws Exception {
+        request(url, "PUT", body, token);
+    }
+
+    private String request(String url, String method, String body, String token) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setRequestMethod(method);
+        c.setConnectTimeout(20000);
+        c.setReadTimeout(30000);
+        c.setRequestProperty("Accept", "application/vnd.github+json");
+        c.setRequestProperty("Authorization", "Bearer " + token);
+        c.setRequestProperty("User-Agent", "SirinEngine");
+        c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+
+        if (body != null) {
+            c.setDoOutput(true);
+            c.setRequestProperty("Content-Type", "application/json");
+            try (OutputStream out = c.getOutputStream()) {
+                out.write(body.getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        int code = c.getResponseCode();
+        InputStream in = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
+        String response = readAll(in);
+        if (code < 200 || code >= 300) {
+            throw new IOException("GitHub HTTP " + code + ": " + response);
+        }
+        return response;
+    }
+
+    private String readAll(InputStream in) throws Exception {
+        if (in == null) return "";
+        try (InputStream src = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] b = new byte[16384];
+            int n;
+            while ((n = src.read(b)) > 0) out.write(b, 0, n);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private byte[] downloadBytes(String url, String token) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setInstanceFollowRedirects(true);
+        c.setConnectTimeout(20000);
+        c.setReadTimeout(60000);
+        c.setRequestProperty("Authorization", "Bearer " + token);
+        c.setRequestProperty("User-Agent", "SirinEngine");
+        int code = c.getResponseCode();
+        if (code < 200 || code >= 300) {
+            throw new IOException("Artifact HTTP " + code);
+        }
+        try (InputStream in = c.getInputStream();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] b = new byte[16384];
+            int n;
+            while ((n = in.read(b)) > 0) out.write(b, 0, n);
+            return out.toByteArray();
+        }
+    }
 }
