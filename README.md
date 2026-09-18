@@ -1,20 +1,25 @@
 # Sirin Engine
 
-Sirin Engine is a Godot-based Android starter project focused on a landscape mobile editor interface.
+Sirin Engine is a native Android mobile project manager. It is **not a Godot project**.
 
-## Included
+## Current build
 
+- Native Android app
 - Forced landscape orientation
 - Touch-friendly controls
-- ZIP project workflow UI
-- Android APK export configuration
-- GitHub Actions APK build
-- ARM64 Android target
+- ZIP project picker
+- Project validation entry point
+- APK build entry point
+- Hardware acceleration
+- Screen kept active while the app is open
+- ARM64-compatible Android build configuration
 
-## Build
+## APK
 
-Open **Actions → Build Sirin Engine APK → Run workflow** in GitHub. The generated APK is uploaded as the workflow artifact.
+GitHub Actions builds the app automatically on pushes to `main` and also supports manual workflow runs. The APK is published as the `SirinEngine-APK` workflow artifact.
 
-## Safety/performance
+## Important
 
-The project uses Godot's mobile Compatibility renderer. It does not intentionally run a destructive CPU/GPU stress loop or force the phone to overheat. Graphics quality can be increased later through explicit engine settings.
+A normal Android APK cannot safely compile every arbitrary ZIP project entirely by itself. A real compiler/build environment is required. Sirin Engine therefore provides the mobile project interface while the actual Android APK build runs in the CI build environment.
+
+The app does not deliberately run a destructive CPU/GPU stress loop or force the phone to overheat.
