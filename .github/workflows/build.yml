@@ -17,7 +17,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -29,14 +29,19 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
+      - name: Configure Android SDK
         shell: bash
         run: |
           set -euxo pipefail
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          ANDROID_HOME="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          export ANDROID_HOME
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install             "platform-tools"             "platforms;android-35"             "build-tools;35.0.0"
 
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
@@ -62,15 +67,13 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p app/src/main/assets
-
-          if [ -n "${PROJECT_ZIP}" ] && [ -f "${PROJECT_ZIP}" ]; then
-            cp "${PROJECT_ZIP}" app/src/main/assets/project.zip
+          if [ -n "$PROJECT_ZIP" ] && [ -f "$PROJECT_ZIP" ]; then
+            cp "$PROJECT_ZIP" app/src/main/assets/project.zip
           else
             test -d samples/3d-racing
             command -v zip >/dev/null
-            (cd samples/3d-racing && zip -qr "${GITHUB_WORKSPACE}/app/src/main/assets/project.zip" .)
+            (cd samples/3d-racing && zip -qr "$GITHUB_WORKSPACE/app/src/main/assets/project.zip" .)
           fi
-
           unzip -t app/src/main/assets/project.zip
 
       - name: Prepare engine icon
@@ -102,10 +105,9 @@ jobs:
         run: |
           set -euxo pipefail
           APK="app/build/outputs/apk/release/app-release.apk"
-          test -f "${APK}"
-          test -s "${APK}"
-          file "${APK}"
-          ls -lh "${APK}"
+          test -s "$APK"
+          file "$APK"
+          ls -lh "$APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
