@@ -4,5 +4,6 @@
   "entry": "main.html",
   "mode": "3d",
   "icon": "icon.svg",
-  "orientation": "landscape"
+  "orientation": "landscape",
+  "scene": "scene.json"
 }
