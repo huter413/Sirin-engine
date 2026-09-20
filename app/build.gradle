@@ -31,8 +31,17 @@ dependencies {
 def prepareRuntimeTemplate = tasks.register("prepareRuntimeTemplate") {
     dependsOn(":runtime:assembleRelease")
     doLast {
-        def source = file("${rootProject.projectDir}/runtime/build/outputs/apk/release/runtime-release-unsigned.apk")
-        if (!source.exists()) throw new GradleException("Runtime APK bulunamadı: " + source)
+        def runtimeOutputs = file("${rootProject.projectDir}/runtime/build/outputs/apk/release")
+        def candidates = runtimeOutputs.listFiles()?.findAll {
+            it.isFile() && it.name.endsWith(".apk") && !it.name.contains("-androidTest")
+        } ?: []
+        if (candidates.isEmpty()) {
+            throw new GradleException("Runtime APK bulunamadı. Klasör: " + runtimeOutputs.absolutePath)
+        }
+        def source = candidates.find { it.name.endsWith("-unsigned.apk") } ?: candidates[0]
+        if (!source.isFile() || source.length() == 0) {
+            throw new GradleException("Runtime APK boş veya geçersiz: " + source)
+        }
         def assetsDir = file("${projectDir}/src/main/assets")
         assetsDir.mkdirs()
         copy {
