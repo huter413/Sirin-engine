@@ -5,4 +5,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "SirinEngine"
-include(":app")
+include(":app", ":runtime")
