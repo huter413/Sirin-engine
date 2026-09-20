@@ -140,15 +140,30 @@ public class MainActivity extends Activity {
     }
 
     private void performLocalBuild(){
-        setStatus("Yerel APK derleyici hazırlanıyor…");
-        // The current Android runtime is the editor itself. A true self-contained APK compiler
-        // requires an embedded Android build toolchain/template; this code deliberately refuses
-        // to create a fake .apk or rename a ZIP. Until that compiler is bundled, show a precise state.
+        setStatus("Yerel APK dışa aktarma hazırlanıyor…");
         new Thread(()->{
             try{
-                Thread.sleep(350);
-                throw new IOException("Yerel Android APK derleyici henüz projeye gömülü değil; sahte APK oluşturulmadı.");
-            }catch(Exception e){addError("Yerel derleme: "+e.getMessage());setStatus("Yerel APK derleyicisi eksik.");}
+                /*
+                 * Export contract:
+                 * The compiler/runtime backend must place a verified, installable APK at
+                 * filesDir/sirin-export/build.apk. We never rename a ZIP or copy the engine APK.
+                 * Once the backend is present, this path is written to the user's Download area
+                 * through MediaStore.Downloads on Android 10+.
+                 */
+                File built = new File(getFilesDir(), "sirin-export/build.apk");
+                if(!built.isFile() || built.length()==0){
+                    throw new IOException("Yerel Android APK derleyici/export backend henüz projeye eklenmedi.");
+                }
+                String safeName = projectName.replaceAll("[^A-Za-z0-9._-]+","_");
+                if(safeName.length()==0) safeName="SirinProject";
+                File output = built;
+                Uri saved = LocalApkOutput.saveToDownloads(this, output, safeName + ".apk");
+                runOnUiThread(()->Toast.makeText(this,"APK Download'a kaydedildi.",Toast.LENGTH_LONG).show());
+                setStatus("APK Download'a kaydedildi: " + saved);
+            }catch(Exception e){
+                addError("Yerel derleme: "+e.getMessage());
+                setStatus("APK oluşturulamadı: export backend eksik.");
+            }
         }).start();
     }
 
