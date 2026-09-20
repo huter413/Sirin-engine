@@ -1,35 +1,45 @@
-# Sirin Engine
+# Şirin Engine
 
-Native Android mobile project-to-APK tool. **No Godot project skeleton.**
+Native Android mobile project-to-APK tool and the home of the Şirin Engine project format.
 
-## App flow
+## Current app flow
 
-1. Open a Sirin ZIP.
-2. The ZIP is unpacked locally.
-3. Use **2D Editor** or **3D Editor**.
-4. Tap **▶ Oyun Oyna** to test the project.
-5. JavaScript, console, WebView and HTTP errors are collected in **⚠ Hata Paneli**.
-6. Tap **🚀 APK Derle**. The ZIP is uploaded to the configured GitHub repository and GitHub Actions builds the release APK.
-7. After a successful build, Android's document saver opens with the APK filename ready. On modern Android, broad storage permission is not needed for this system picker. Save the file under **Download**.
+1. Open a Şirin project ZIP.
+2. The project is unpacked locally.
+3. Use the 1D, 2D, 3D or 4D editor mode supported by the project.
+4. Run the project for testing.
+5. Inspect JavaScript, console, WebView and HTTP errors in the error panel.
+6. Build an Android APK.
+7. GitHub Actions can store the generated APK as a workflow artifact.
 
-## Project ZIP format
+GitHub Actions is the build runner. The repository contains the Şirin Engine project format and build integration rather than a copied Godot or Unity game project.
 
-Required:
-- project.json
-- main.html
+## Project format
 
-Optional:
-- scene.json
-- icon.png
-- icon.svg
-- other assets
+New Şirin Engine projects use project.sr as the canonical manifest.
+The project package should contain project.sr and the entry file declared by it, with optional scenes, assets, scripts, worlds, ui and settings folders.
+The racing sample also keeps project.json as a compatibility manifest for the existing build path.
 
-The build reads the icon declared by project.json first, then icon.png, then icon.svg, and finally uses the built-in Sirin icon.
+## Editors
+
+- 1D — timelines and linear data
+- 2D — UI, sprites and touch controls
+- 3D — voxel/world scenes, models, cameras and lighting
+- 4D — time-aware 3D scene editing
 
 ## Included sample
 
-The repository contains **samples/3d-racing**, a touch-controlled WebGL 3D racing sample with traffic and N2O. The matching ZIP is supplied separately.
+samples/3d-racing is an original touch-controlled WebGL 3D racing project with steering, traffic, N2O boost and lap counting.
 
-## Build
+## Engine architecture
 
-GitHub Actions workflow: **Build Sirin Engine APK**.
+See docs/engine-architecture.svg for the visual overview and docs/project-format.md for the project.sr contract.
+
+## Android builds
+
+GitHub documents workflow artifacts as files produced by a workflow run, including binary build outputs. Android requires APKs to be digitally signed before installation or update, so release builds should use a controlled signing key or keystore.
+
+## Repository
+
+Owner: huter413
+Repository: Sirin-engine
