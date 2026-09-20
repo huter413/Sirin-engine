@@ -33,7 +33,6 @@ import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final int PICK_ZIP = 41;
-    private static final int CREATE_APK = 42;
     private static final int STORAGE_PERMISSION = 43;
 
     private TextView status, errorText;
@@ -60,7 +59,7 @@ public class MainActivity extends Activity {
     private void buildHome(){
         LinearLayout root=base();
         TextView title=text("ŞİRİN ENGINE",34); title.setGravity(View.TEXT_ALIGNMENT_GRAVITY); root.addView(title);
-        TextView sub=text("Oyun oluştur • düzenle • test et • oyunu cihazda dışa aktar",16);sub.setTextColor(Color.LTGRAY);root.addView(sub);
+        TextView sub=text("Oyun oluştur • düzenle • test et • gerçek APK üret",16);sub.setTextColor(Color.LTGRAY);root.addView(sub);
 
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
         Button open=button("ZIP Aç");open.setOnClickListener(v->pickZip());row.addView(open,new LinearLayout.LayoutParams(0,dp(72),1));
@@ -69,8 +68,8 @@ public class MainActivity extends Activity {
         root.addView(row);
 
         LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(16),dp(12),dp(16),dp(12));card.setBackgroundColor(Color.rgb(20,28,38));
-        card.addView(text("OYUN OLUŞTURMA + YEREL DIŞA AKTARMA",20));
-        card.addView(text("Yeni Oyun ile 2D/3D proje oluşturabilir, düzenleyebilir, test edebilir ve oyun paketini Download klasörüne aktarabilirsin.",14));
+        card.addView(text("OYUN OLUŞTURMA + GERÇEK APK EXPORT",20));
+        card.addView(text("Proje oluştur, düzenle, test et ve cihaz üzerinde gerçek Android APK oluşturup Download klasörüne kaydet.",14));
         root.addView(card,new LinearLayout.LayoutParams(-1,dp(120)));
 
         status=text("Durum: Hazır\nProje: Seçilmedi\nDerleme: Yerel",17);root.addView(status,new LinearLayout.LayoutParams(-1,0,1));
@@ -150,21 +149,20 @@ public class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT<=28&&checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},STORAGE_PERMISSION);return;
         }
-        new AlertDialog.Builder(this).setTitle("Oyunu Dışa Aktar").setMessage("Proje doğrulanıp yerel .srgame oyun paketi oluşturulacak ve Download klasörüne kaydedilecek. ZIP yeniden adlandırılmaz; proje dosyaları gerçek bir export paketine dönüştürülür.").setPositiveButton("Dışa Aktar",(d,w)->performLocalBuild()).setNegativeButton("İptal",null).show();
+        new AlertDialog.Builder(this).setTitle("Gerçek APK Üret").setMessage("Proje, Şirin Engine runtime APK'sına paketlenecek ve cihaz üzerinde APK Signature Scheme v1/v2/v3 ile imzalanarak Download klasörüne kaydedilecek.").setPositiveButton("APK Üret",(d,w)->performLocalBuild()).setNegativeButton("İptal",null).show();
     }
 
     private void performLocalBuild(){
-        setStatus("Yerel oyun export hazırlanıyor…");
+        setStatus("Gerçek APK hazırlanıyor…");
         new Thread(()->{
             try{
-                File outDir=new File(getFilesDir(),"sirin-export");
-                File bundle=LocalExportBackend.stageProject(projectDir,outDir);
-                File downloads=LocalExportOutput.saveToDownloads(this,bundle,projectName.replaceAll("[^A-Za-z0-9._-]+","_")+".srgame");
-                runOnUiThread(()->Toast.makeText(this,"Oyun paketi Download'a kaydedildi.",Toast.LENGTH_LONG).show());
-                setStatus("Oyun paketi hazır: "+downloads.getName());
+                File apk=ApkExportBackend.buildAndSign(this,projectDir,projectName);
+                File downloads=LocalExportOutput.saveToDownloads(this,apk,projectName.replaceAll("[^A-Za-z0-9._-]+","_")+".apk");
+                runOnUiThread(()->Toast.makeText(this,"Gerçek APK Download'a kaydedildi.",Toast.LENGTH_LONG).show());
+                setStatus("APK hazır: "+downloads.getName());
             }catch(Exception e){
-                addError("Yerel export: "+e.getMessage());
-                setStatus("Oyun dışa aktarılamadı.");
+                addError("APK export: "+e.getClass().getSimpleName()+": "+e.getMessage());
+                setStatus("APK üretilemedi.");
             }
         }).start();
     }
@@ -173,7 +171,7 @@ public class MainActivity extends Activity {
     private String listFiles(File d,String p){StringBuilder o=new StringBuilder();File[] fs=d.listFiles();if(fs==null)return "";Arrays.sort(fs,Comparator.comparing(File::getName));for(File f:fs){o.append(p).append(f.isDirectory()?"[DIR] ":"").append(f.getName()).append("\n");if(f.isDirectory())o.append(listFiles(f,p+"  "));}return o.toString();}
 
     private void showSettings(){
-        new AlertDialog.Builder(this).setTitle("Şirin Engine").setMessage("Yerel oyun export modu\n\nGitHub hesabı, token ve uzak CI derlemesi kullanılmıyor. Oyun paketi Download'a Android sistem API'leriyle kaydedilir.").setPositiveButton("Tamam",null).show();
+        new AlertDialog.Builder(this).setTitle("Şirin Engine").setMessage("Cihaz üzerinde gerçek APK export\n\nRuntime APK + proje paketleme + yerel RSA anahtarıyla v1/v2/v3 imzalama kullanılır. GitHub hesabı veya uzak CI gerekmez.").setPositiveButton("Tamam",null).show();
     }
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==STORAGE_PERMISSION){if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED)performLocalBuild();else setStatus("Depolama izni verilmedi.");}}
