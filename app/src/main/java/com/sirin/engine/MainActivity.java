@@ -64,17 +64,31 @@ public class MainActivity extends Activity {
 
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
         Button open=button("ZIP Aç");open.setOnClickListener(v->pickZip());row.addView(open,new LinearLayout.LayoutParams(0,dp(72),1));
+        Button create=button("Yeni Oyun");create.setOnClickListener(v->createGame());row.addView(create,new LinearLayout.LayoutParams(0,dp(72),1));
         Button settings=button("Ayarlar");settings.setOnClickListener(v->showSettings());row.addView(settings,new LinearLayout.LayoutParams(0,dp(72),1));
         root.addView(row);
 
         LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(16),dp(12),dp(16),dp(12));card.setBackgroundColor(Color.rgb(20,28,38));
-        card.addView(text("YEREL APK DIŞA AKTARMA",20));
-        card.addView(text("APK Derle düğmesi yalnızca proje açıldıktan sonra görünür. Çıktı Download klasörüne kaydedilir.",14));
+        card.addView(text("OYUN OLUŞTURMA + YEREL DIŞA AKTARMA",20));
+        card.addView(text("Yeni Oyun ile 2D/3D proje oluşturabilir, düzenleyebilir, test edebilir ve oyun paketini Download klasörüne aktarabilirsin.",14));
         root.addView(card,new LinearLayout.LayoutParams(-1,dp(120)));
 
         status=text("Durum: Hazır\nProje: Seçilmedi\nDerleme: Yerel",17);root.addView(status,new LinearLayout.LayoutParams(-1,0,1));
         TextView help=text("Not: Android'in yeni sürümlerinde Download'a kaydetmek için sistem dosya erişimi kullanılır; eski sürümlerde gerekli depolama izni istenir.",14);help.setTextColor(Color.GRAY);root.addView(help);
         setContentView(root);
+    }
+
+    private void createGame(){
+        final EditText name=new EditText(this); name.setHint("Oyun adı"); name.setSingleLine(true);
+        LinearLayout box=base(); box.setPadding(dp(8),0,dp(8),0); box.addView(name);
+        new AlertDialog.Builder(this).setTitle("Yeni Oyun").setView(box)
+            .setItems(new String[]{"2D Oyun","3D Oyun"},(d,which)->{
+                try{
+                    String n=name.getText().toString().trim(); if(n.isEmpty()) n=which==0?"Sirin 2D Game":"Sirin 3D Game";
+                    projectDir=GameProjectFactory.create(this,n,which==0?"2d":"3d");
+                    selectedZip=null; readProjectMetadata(); showEditor(); setStatus("Yeni oyun oluşturuldu: "+projectName);
+                }catch(Exception e){addError("Yeni oyun: "+e.getMessage());setStatus("Oyun oluşturulamadı.");}
+            }).setNegativeButton("İptal",null).show();
     }
 
     private void pickZip(){
@@ -106,7 +120,7 @@ public class MainActivity extends Activity {
         Button b2=button("2D");b2.setOnClickListener(v->show2DEditor());top.addView(b2,new LinearLayout.LayoutParams(0,dp(58),1));
         Button b3=button("3D");b3.setOnClickListener(v->show3DEditor());top.addView(b3,new LinearLayout.LayoutParams(0,dp(58),1));
         Button play=button("▶ Test");play.setOnClickListener(v->launchGame());top.addView(play,new LinearLayout.LayoutParams(0,dp(58),1));
-        Button apk=button("APK DERLE");apk.setTextSize(18);apk.setOnClickListener(v->startBuild());top.addView(apk,new LinearLayout.LayoutParams(0,dp(58),1));
+        Button apk=button("OYUNU DIŞA AKTAR");apk.setTextSize(16);apk.setOnClickListener(v->startBuild());top.addView(apk,new LinearLayout.LayoutParams(0,dp(58),1));
         Button files=button("Dosyalar");files.setOnClickListener(v->showFiles());top.addView(files,new LinearLayout.LayoutParams(0,dp(58),1));
         editorRoot.addView(top);
 
@@ -132,37 +146,25 @@ public class MainActivity extends Activity {
     private void launchGame(){show3DEditor();}
 
     private void startBuild(){
-        if(selectedZip==null||projectDir==null){setStatus("Önce bir proje aç.");return;}
+        if(projectDir==null){setStatus("Önce bir oyun oluştur veya ZIP aç.");return;}
         if(Build.VERSION.SDK_INT<=28&&checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},STORAGE_PERMISSION);return;
         }
-        new AlertDialog.Builder(this).setTitle("APK Derle").setMessage("Bu sürümde APK derleme cihaz içinde çalışacak şekilde ayrıldı; GitHub hesabı/token kullanılmaz. APK çıktısı Download'a kaydedilecek.").setPositiveButton("Derlemeyi Başlat",(d,w)->performLocalBuild()).setNegativeButton("İptal",null).show();
+        new AlertDialog.Builder(this).setTitle("Oyunu Dışa Aktar").setMessage("Proje doğrulanıp yerel .srgame oyun paketi oluşturulacak ve Download klasörüne kaydedilecek. ZIP yeniden adlandırılmaz; proje dosyaları gerçek bir export paketine dönüştürülür.").setPositiveButton("Dışa Aktar",(d,w)->performLocalBuild()).setNegativeButton("İptal",null).show();
     }
 
     private void performLocalBuild(){
-        setStatus("Yerel APK dışa aktarma hazırlanıyor…");
+        setStatus("Yerel oyun export hazırlanıyor…");
         new Thread(()->{
             try{
-                /*
-                 * Export contract:
-                 * The compiler/runtime backend must place a verified, installable APK at
-                 * filesDir/sirin-export/build.apk. We never rename a ZIP or copy the engine APK.
-                 * Once the backend is present, this path is written to the user's Download area
-                 * through MediaStore.Downloads on Android 10+.
-                 */
-                File built = new File(getFilesDir(), "sirin-export/build.apk");
-                if(!built.isFile() || built.length()==0){
-                    throw new IOException("Yerel Android APK derleyici/export backend henüz projeye eklenmedi.");
-                }
-                String safeName = projectName.replaceAll("[^A-Za-z0-9._-]+","_");
-                if(safeName.length()==0) safeName="SirinProject";
-                File output = built;
-                Uri saved = LocalApkOutput.saveToDownloads(this, output, safeName + ".apk");
-                runOnUiThread(()->Toast.makeText(this,"APK Download'a kaydedildi.",Toast.LENGTH_LONG).show());
-                setStatus("APK Download'a kaydedildi: " + saved);
+                File outDir=new File(getFilesDir(),"sirin-export");
+                File bundle=LocalExportBackend.stageProject(projectDir,outDir);
+                File downloads=LocalExportOutput.saveToDownloads(this,bundle,projectName.replaceAll("[^A-Za-z0-9._-]+","_")+".srgame");
+                runOnUiThread(()->Toast.makeText(this,"Oyun paketi Download'a kaydedildi.",Toast.LENGTH_LONG).show());
+                setStatus("Oyun paketi hazır: "+downloads.getName());
             }catch(Exception e){
-                addError("Yerel derleme: "+e.getMessage());
-                setStatus("APK oluşturulamadı: export backend eksik.");
+                addError("Yerel export: "+e.getMessage());
+                setStatus("Oyun dışa aktarılamadı.");
             }
         }).start();
     }
