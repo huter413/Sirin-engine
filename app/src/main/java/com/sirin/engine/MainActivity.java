@@ -178,7 +178,7 @@ public class MainActivity extends Activity {
 
     private void setStatus(String s){runOnUiThread(()->{if(status!=null)status.setText("Durum: "+s);});}
     private void addError(String s){if(s==null||s.trim().isEmpty())return;errors.add(s);while(errors.size()>80)errors.remove(0);runOnUiThread(()->{if(errorText!=null){StringBuilder b=new StringBuilder("HATA PANELİ\n");for(String e:errors)b.append("• ").append(e).append("\n");errorText.setText(b.toString());}});}
-    private String esc(String s){return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace(""","&quot;");}
+    private String esc(String s){return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");}
 
     private void readProjectMetadata() throws Exception{
         File meta=new File(projectDir,"project.sr");if(!meta.isFile())throw new IOException("project.sr zorunlu.");
