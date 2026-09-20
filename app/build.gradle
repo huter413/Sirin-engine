@@ -8,8 +8,8 @@ android {
         applicationId 'com.sirin.engine'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
 
     compileOptions {
@@ -21,3 +21,26 @@ android {
         release { minifyEnabled false }
     }
 }
+
+dependencies {
+    implementation 'com.android.tools.build:apksig:8.5.2'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+}
+
+def prepareRuntimeTemplate = tasks.register("prepareRuntimeTemplate") {
+    dependsOn(":runtime:assembleRelease")
+    doLast {
+        def source = file("\${rootProject.projectDir}/runtime/build/outputs/apk/release/runtime-release-unsigned.apk")
+        if (!source.exists()) throw new GradleException("Runtime APK bulunamadı: " + source)
+        def assetsDir = file("\${projectDir}/src/main/assets")
+        assetsDir.mkdirs()
+        copy {
+            from source
+            into assetsDir
+            rename { "runtime-template.apk" }
+        }
+    }
+}
+
+tasks.named("preBuild").configure { dependsOn(prepareRuntimeTemplate) }
