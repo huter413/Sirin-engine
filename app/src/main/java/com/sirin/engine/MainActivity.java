@@ -103,15 +103,6 @@ public class MainActivity extends Activity {
                 unzipSafely(selectedZip,projectDir);readProjectMetadata();showEditor();setStatus("Proje açıldı: "+projectName);
             }catch(Exception e){addError("ZIP: "+e.getMessage());setStatus("ZIP hatası: "+e.getMessage());}
         }
-        if(req==CREATE_APK&&result==RESULT_OK&&data!=null){
-            File built=new File(getCacheDir(),"SirinEngine-APK.apk");
-            try(InputStream in=new FileInputStream(built);OutputStream out=getContentResolver().openOutputStream(data.getData())){
-                byte[] buf=new byte[16384];int n;while((n=in.read(buf))>0)out.write(buf,0,n);
-                Toast.makeText(this,"APK Download'a kaydedildi.",Toast.LENGTH_LONG).show();setStatus("APK kaydedildi.");
-            }catch(Exception e){addError("APK kaydetme: "+e.getMessage());setStatus("APK kaydetme hatası.");}
-        }
-    }
-
     private void showEditor(){
         editorRoot=base();
         LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);
