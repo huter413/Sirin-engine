@@ -183,7 +183,7 @@ public class MainActivity extends Activity {
     private void buildHome() {
         LinearLayout root = base();
         root.addView(text("SIRIN ENGINE", 32));
-        TextView sub = text("ZIP → 2D / 3D EDITÖR → OYUN TEST → APK  •  LANDSCAPE", 15);
+        TextView sub = text("ZIP → 1D / 2D / 3D / 4D EDITÖR → OYUN TEST → APK  •  LANDSCAPE", 15);
         sub.setTextColor(Color.LTGRAY);
         root.addView(sub);
 
@@ -702,22 +702,33 @@ public class MainActivity extends Activity {
         return null;
     }
 
-    private void readProjectMetadata() {
-        File meta = new File(projectDir, "project.json");
+    private void readProjectMetadata() throws Exception {
+        File meta = new File(projectDir, "project.sr");
+        if (!meta.isFile()) {
+            throw new IOException("Şirin Engine projesi için project.sr zorunlu.");
+        }
 
+        JSONObject o;
         try {
-            JSONObject o = new JSONObject(readText(meta));
-            projectName = o.optString("name", "Sirin Project");
-            entryFile = o.optString("entry", "main.html");
-
-            String mode = o.optString("mode", "3d");
-            if ("2d".equalsIgnoreCase(mode)) {
-                entryFile = o.optString("entry", "main.html");
-            }
+            o = new JSONObject(readText(meta));
         } catch (Exception e) {
-            projectName = "Sirin Project";
-            entryFile = "main.html";
-            addError("project.json: " + e.getMessage());
+            throw new IOException("project.sr okunamadı: " + e.getMessage(), e);
+        }
+
+        if (!"Sirin Engine".equals(o.optString("engine", ""))) {
+            throw new IOException("project.sr Sirin Engine projesi olarak tanımlanmamış.");
+        }
+        if (!o.has("format")) {
+            throw new IOException("project.sr içinde format bulunamadı.");
+        }
+
+        projectName = o.optString("project_name", "Sirin Project");
+        entryFile = o.optString("entry", "main.html");
+        if (entryFile.isEmpty()) throw new IOException("project.sr içinde entry bulunamadı.");
+
+        File entry = new File(projectDir, entryFile);
+        if (!entry.getCanonicalPath().startsWith(projectDir.getCanonicalPath() + File.separator) || !entry.isFile()) {
+            throw new IOException("Proje giriş dosyası bulunamadı: " + entryFile);
         }
     }
 
