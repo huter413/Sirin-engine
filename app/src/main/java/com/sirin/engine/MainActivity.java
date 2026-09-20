@@ -60,7 +60,7 @@ public class MainActivity extends Activity {
     private void buildHome(){
         LinearLayout root=base();
         TextView title=text("ŞİRİN ENGINE",34); title.setGravity(View.TEXT_ALIGNMENT_GRAVITY); root.addView(title);
-        TextView sub=text("Projeni aç • düzenle • test et • APK'yı doğrudan cihazda dışa aktar",16);sub.setTextColor(Color.LTGRAY);root.addView(sub);
+        TextView sub=text("Oyun oluştur • düzenle • test et • oyunu cihazda dışa aktar",16);sub.setTextColor(Color.LTGRAY);root.addView(sub);
 
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
         Button open=button("ZIP Aç");open.setOnClickListener(v->pickZip());row.addView(open,new LinearLayout.LayoutParams(0,dp(72),1));
@@ -173,7 +173,7 @@ public class MainActivity extends Activity {
     private String listFiles(File d,String p){StringBuilder o=new StringBuilder();File[] fs=d.listFiles();if(fs==null)return "";Arrays.sort(fs,Comparator.comparing(File::getName));for(File f:fs){o.append(p).append(f.isDirectory()?"[DIR] ":"").append(f.getName()).append("\n");if(f.isDirectory())o.append(listFiles(f,p+"  "));}return o.toString();}
 
     private void showSettings(){
-        new AlertDialog.Builder(this).setTitle("Şirin Engine").setMessage("Yerel APK dışa aktarma modu\n\nGitHub hesabı, token ve uzak CI derlemesi kullanılmıyor. Download'a kayıt Android sistem API'leriyle yapılır.").setPositiveButton("Tamam",null).show();
+        new AlertDialog.Builder(this).setTitle("Şirin Engine").setMessage("Yerel oyun export modu\n\nGitHub hesabı, token ve uzak CI derlemesi kullanılmıyor. Oyun paketi Download'a Android sistem API'leriyle kaydedilir.").setPositiveButton("Tamam",null).show();
     }
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==STORAGE_PERMISSION){if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED)performLocalBuild();else setStatus("Depolama izni verilmedi.");}}
