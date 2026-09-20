@@ -2,14 +2,10 @@ name: Build Sirin Engine APK
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
   workflow_dispatch:
-    inputs:
-      project_zip:
-        description: "Optional project ZIP path inside the repository"
-        required: false
-        type: string
-        default: "projects/inbox/current-project.zip"
 
 permissions:
   contents: read
@@ -21,11 +17,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - name: Configure Android SDK
         shell: bash
         run: |
@@ -39,10 +37,12 @@ jobs:
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
+
       - name: Verify Android project
         shell: bash
         run: |
@@ -54,81 +54,14 @@ jobs:
           grep -q 'com.android.application' build.gradle
           grep -q 'android:exported="true"' app/src/main/AndroidManifest.xml
           grep -q 'android:name=".MainActivity"' app/src/main/AndroidManifest.xml
-      - name: Prepare project ZIP
-        shell: bash
-        env:
-          PROJECT_ZIP: ${{ inputs.project_zip }}
-        run: |
-          set -euxo pipefail
-          mkdir -p app/src/main/assets
-          rm -f app/src/main/assets/project.zip
-          if [ -n "$PROJECT_ZIP" ] && [ -f "$PROJECT_ZIP" ]; then
-            cp "$PROJECT_ZIP" app/src/main/assets/project.zip
-            unzip -t app/src/main/assets/project.zip
-            WORK="$(mktemp -d)"
-            unzip -q app/src/main/assets/project.zip -d "$WORK"
-            test -f "$WORK/project.sr"
-            python3 - "$WORK/project.sr" "$WORK" <<'PY'
-import json, pathlib, sys
-meta = pathlib.Path(sys.argv[1])
-root = pathlib.Path(sys.argv[2]).resolve()
-data = json.loads(meta.read_text(encoding="utf-8"))
-if data.get("engine") != "Sirin Engine":
-    raise SystemExit("project.sr engine must be Sirin Engine")
-if not isinstance(data.get("format"), int):
-    raise SystemExit("project.sr format must be an integer")
-entry = data.get("entry")
-if not isinstance(entry, str) or not entry:
-    raise SystemExit("project.sr entry is required")
-path = (root / entry).resolve()
-if root not in path.parents or not path.is_file():
-    raise SystemExit("invalid project.sr entry")
-print("Project OK:", data.get("project_name", root.name))
-PY
-          fi
-      - name: Prepare project icon
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p app/src/main/res/drawable
-          rm -f app/src/main/res/drawable/ic_project_icon.png app/src/main/res/drawable/ic_project_icon.xml
-          if [ -f app/src/main/assets/project.zip ]; then
-            WORK="$(mktemp -d)"
-            unzip -q app/src/main/assets/project.zip -d "$WORK"
-            ICON="$(python3 - "$WORK/project.sr" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("icon", ""))
-PY
-)"
-            if [ -n "$ICON" ] && [ -f "$WORK/$ICON" ]; then
-              case "${ICON,,}" in
-                *.png) cp "$WORK/$ICON" app/src/main/res/drawable/ic_project_icon.png ;;
-                *.svg)
-                  if ! command -v rsvg-convert >/dev/null 2>&1; then
-                    sudo apt-get update -qq
-                    sudo apt-get install -y -qq librsvg2-bin
-                  fi
-                  rsvg-convert -w 512 -h 512 "$WORK/$ICON" -o app/src/main/res/drawable/ic_project_icon.png
-                  ;;
-                *) echo "Icon must be PNG or SVG"; exit 1 ;;
-              esac
-            fi
-          fi
-          if [ ! -f app/src/main/res/drawable/ic_project_icon.png ]; then
-            cat > app/src/main/res/drawable/ic_project_icon.xml <<'EOF'
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-<path android:fillColor="#101820" android:pathData="M0,0h108v108h-108z"/>
-<path android:fillColor="#56D6FF" android:pathData="M18,14h72v72h-72z"/>
-<path android:fillColor="#101820" android:pathData="M31,66L36,42L45,28H63L72,42L77,66H31z"/>
-</vector>
-EOF
-          fi
+
       - name: Build release APK
         shell: bash
         run: |
           set -euxo pipefail
           gradle --version
           gradle --no-daemon --stacktrace --warning-mode all :app:assembleRelease
+
       - name: Verify APK output
         shell: bash
         run: |
@@ -138,6 +71,7 @@ EOF
           test -s "$APK"
           file "$APK"
           ls -lh "$APK"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
