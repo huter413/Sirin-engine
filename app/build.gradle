@@ -31,9 +31,9 @@ dependencies {
 def prepareRuntimeTemplate = tasks.register("prepareRuntimeTemplate") {
     dependsOn(":runtime:assembleRelease")
     doLast {
-        def source = file("\${rootProject.projectDir}/runtime/build/outputs/apk/release/runtime-release-unsigned.apk")
+        def source = file("${rootProject.projectDir}/runtime/build/outputs/apk/release/runtime-release-unsigned.apk")
         if (!source.exists()) throw new GradleException("Runtime APK bulunamadı: " + source)
-        def assetsDir = file("\${projectDir}/src/main/assets")
+        def assetsDir = file("${projectDir}/src/main/assets")
         assetsDir.mkdirs()
         copy {
             from source
