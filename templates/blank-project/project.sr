@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "engine": "Sirin Engine",
+  "engine_version": "1.0.0",
+  "project_name": "New Sirin Project",
+  "entry": "main.html",
+  "editor": "3d",
+  "platforms": ["android", "windows"]
+}
