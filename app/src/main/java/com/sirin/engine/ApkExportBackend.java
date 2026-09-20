@@ -72,7 +72,7 @@ public final class ApkExportBackend {
                     dst.setSize(data.length);
                     dst.setCompressedSize(data.length);
                     dst.setCrc(crc(data));
-                    dst.setExtra(alignmentExtra(zip, data.length, 4));
+                    dst.setExtra(new byte[0]);
                     zip.putNextEntry(dst); zip.write(data); zip.closeEntry();
                 } else {
                     dst.setMethod(src.getMethod());
@@ -89,6 +89,7 @@ public final class ApkExportBackend {
             }
             addDirectory(zip, projectDir, projectDir, b);
         }
+        validateResourcesEntry(out);
     }
 
     private static void addDirectory(ZipOutputStream zip, File root, File file, byte[] b) throws IOException {
@@ -110,11 +111,14 @@ public final class ApkExportBackend {
         zip.closeEntry();
     }
 
-    private static byte[] alignmentExtra(ZipOutputStream zip, int dataLength, int alignment) {
-        // ZipOutputStream writes the local header immediately after putNextEntry.
-        // The exact offset is not exposed, so resources.arsc is stored without relying
-        // on speculative padding; APK Signature v2/v3 remain authoritative.
-        return new byte[0];
+    private static void validateResourcesEntry(File apk) throws IOException {
+        try (ZipFile z = new ZipFile(apk)) {
+            ZipEntry e = z.getEntry("resources.arsc");
+            if (e == null) throw new IOException("resources.arsc eksik.");
+            if (e.getMethod() != ZipEntry.STORED) {
+                throw new IOException("resources.arsc sıkıştırılmış olamaz.");
+            }
+        }
     }
 
     private static KeyPair createKeyPair() throws GeneralSecurityException {
