@@ -27,9 +27,9 @@ The racing sample also keeps project.json as a compatibility manifest for the ex
 - 3D — voxel/world scenes, models, cameras and lighting
 - 4D — time-aware 3D scene editing
 
-## Included sample
+## Separate projects
 
-samples/3d-racing is an original touch-controlled WebGL 3D racing project with steering, traffic, N2O boost and lap counting.
+The engine repository contains the editor/runtime and Android build pipeline. Example game projects are distributed separately and are not bundled into the engine repository.
 
 ## Engine architecture
 
