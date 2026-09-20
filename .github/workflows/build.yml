@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       project_zip:
-        description: "Optional project ZIP path inside the repository. The ZIP must contain project.sr at its root."
+        description: "Optional project ZIP path inside the repository."
         required: false
         type: string
         default: "projects/inbox/current-project.zip"
@@ -18,51 +18,37 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Configure Android SDK
+      - name: Android SDK
         shell: bash
         run: |
-          set -euxo pipefail
-          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
-            echo "ANDROID_SDK_ROOT is not set by the runner."
-            exit 1
-          fi
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          if [ -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          fi
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Set up Gradle 8.7
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$SDK" || { echo "Android SDK missing"; exit 1; }
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          test -d "$SDK/platforms/android-35" || { echo "android-35 platform missing"; exit 1; }
+          test -d "$SDK/build-tools/35.0.0" || { echo "build-tools 35.0.0 missing"; exit 1; }
+
+      - name: Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: Verify toolchain
+      - name: Validate project
         shell: bash
         run: |
-          set -euxo pipefail
-          java -version
-          gradle --version
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          test -d "$ANDROID_SDK_ROOT/platforms/android-35"
-          test -d "$ANDROID_SDK_ROOT/build-tools/35.0.0"
-
-      - name: Verify Android project
-        shell: bash
-        run: |
-          set -euxo pipefail
+          set -euo pipefail
           test -f settings.gradle
           test -f build.gradle
           test -f app/build.gradle
@@ -70,134 +56,85 @@ jobs:
           grep -q "com.android.application" build.gradle
           grep -q 'android:exported="true"' app/src/main/AndroidManifest.xml
           grep -q 'android:name=".MainActivity"' app/src/main/AndroidManifest.xml
-      - name: Prepare optional project package
+
+      - name: Prepare project ZIP
         shell: bash
         env:
           PROJECT_ZIP: ${{ inputs.project_zip }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           mkdir -p app/src/main/assets
           rm -f app/src/main/assets/project.zip
           if [ -n "$PROJECT_ZIP" ] && [ -f "$PROJECT_ZIP" ]; then
             cp "$PROJECT_ZIP" app/src/main/assets/project.zip
             unzip -t app/src/main/assets/project.zip
-
             WORK="$(mktemp -d)"
             unzip -q app/src/main/assets/project.zip -d "$WORK"
-
             test -f "$WORK/project.sr"
             python3 - "$WORK/project.sr" "$WORK" <<'PY'
-import json
-import pathlib
-import sys
-
-manifest = pathlib.Path(sys.argv[1])
-root = pathlib.Path(sys.argv[2])
-data = json.loads(manifest.read_text(encoding="utf-8"))
-
-if data.get("engine") != "Sirin Engine":
-    raise SystemExit("project.sr engine must be Sirin Engine")
-if not isinstance(data.get("format"), int):
-    raise SystemExit("project.sr format must be an integer")
-entry = data.get("entry")
-if not isinstance(entry, str) or not entry:
-    raise SystemExit("project.sr entry is required")
-entry_path = (root / entry).resolve()
-if root.resolve() not in entry_path.parents:
-    raise SystemExit("project.sr entry escapes the project root")
-if not entry_path.is_file():
-    raise SystemExit(f"project.sr entry does not exist: {entry}")
-print("Valid Sirin Engine project:", data.get("project_name", root.name))
+import json, pathlib, sys
+m=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+d=json.loads(m.read_text(encoding="utf-8"))
+if d.get("engine") != "Sirin Engine": raise SystemExit("project.sr engine must be Sirin Engine")
+if not isinstance(d.get("format"), int): raise SystemExit("project.sr format must be an integer")
+entry=d.get("entry")
+if not isinstance(entry,str) or not entry: raise SystemExit("project.sr entry is required")
+p=(root/entry).resolve()
+if root.resolve() not in p.parents or not p.is_file(): raise SystemExit("invalid project.sr entry")
+print("Project OK:", d.get("project_name", root.name))
 PY
           fi
 
-      - name: Prepare project icon
+      - name: Prepare icon
         shell: bash
-        env:
-          PROJECT_ZIP: ${{ inputs.project_zip }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           mkdir -p app/src/main/res/drawable
-          rm -f app/src/main/res/drawable/ic_project_icon.png
-          rm -f app/src/main/res/drawable/ic_project_icon.xml
-
+          rm -f app/src/main/res/drawable/ic_project_icon.png app/src/main/res/drawable/ic_project_icon.xml
           if [ -f app/src/main/assets/project.zip ]; then
-            sudo apt-get update
-            sudo apt-get install -y unzip librsvg2-bin
-
             WORK="$(mktemp -d)"
             unzip -q app/src/main/assets/project.zip -d "$WORK"
-
-            ICON_PATH=$(python3 - "$WORK/project.sr" <<'PY'
-import json
-import pathlib
-import sys
-data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(data.get("icon", ""))
+            ICON="$(python3 - "$WORK/project.sr" <<'PY'
+import json, pathlib, sys
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("icon",""))
 PY
-)
-
-            ICON_FOUND=""
-            if [ -n "$ICON_PATH" ] && [ -f "$WORK/$ICON_PATH" ]; then
-              ICON_FOUND="$WORK/$ICON_PATH"
-            fi
-
-            if [ -n "$ICON_FOUND" ]; then
-              case "${ICON_FOUND,,}" in
-                *.svg)
-                  rsvg-convert -w 512 -h 512 "$ICON_FOUND" -o app/src/main/res/drawable/ic_project_icon.png
-                  ;;
-                *.png)
-                  cp "$ICON_FOUND" app/src/main/res/drawable/ic_project_icon.png
-                  ;;
-                *)
-                  echo "project.sr icon must point to SVG or PNG"
-                  exit 1
-                  ;;
+)"
+            if [ -n "$ICON" ] && [ -f "$WORK/$ICON" ]; then
+              case "${ICON,,}" in
+                *.png) cp "$WORK/$ICON" app/src/main/res/drawable/ic_project_icon.png ;;
+                *.svg) sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin && rsvg-convert -w 512 -h 512 "$WORK/$ICON" -o app/src/main/res/drawable/ic_project_icon.png ;;
+                *) echo "Icon must be PNG or SVG"; exit 1 ;;
               esac
-            elif [ -f "$WORK/project_icon.png" ]; then
-              cp "$WORK/project_icon.png" app/src/main/res/drawable/ic_project_icon.png
-            elif [ -f "$WORK/icon.png" ]; then
-              cp "$WORK/icon.png" app/src/main/res/drawable/ic_project_icon.png
-            elif [ -f "$WORK/icon.svg" ]; then
-              rsvg-convert -w 512 -h 512 "$WORK/icon.svg" -o app/src/main/res/drawable/ic_project_icon.png
             fi
           fi
-
           if [ ! -f app/src/main/res/drawable/ic_project_icon.png ]; then
             cat > app/src/main/res/drawable/ic_project_icon.xml <<'EOF'
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#101820" android:pathData="M0,0h108v108h-108z"/>
-    <path android:fillColor="#56D6FF" android:pathData="M18,14h72v72h-72z"/>
-    <path android:fillColor="#101820" android:pathData="M31,66L36,42L45,28H63L72,42L77,66H31z"/>
-    <path android:fillColor="#DFF8FF" android:pathData="M43,42h22l-6,-7h-10z"/>
-    <path android:fillColor="#111111" android:pathData="M35,62h10v8h-10zM63,62h10v8h-10z"/>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+<path android:fillColor="#101820" android:pathData="M0,0h108v108h-108z"/>
+<path android:fillColor="#56D6FF" android:pathData="M18,14h72v72h-72z"/>
+<path android:fillColor="#101820" android:pathData="M31,66L36,42L45,28H63L72,42L77,66H31z"/>
 </vector>
 EOF
           fi
 
-      - name: Build release APK
+      - name: Build APK
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          java -version
+          gradle --version
           gradle --no-daemon --stacktrace --warning-mode all :app:assembleRelease
 
-      - name: Verify APK output
+      - name: Verify APK
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           APK="$(find app/build/outputs -type f -name "*.apk" | head -n 1)"
           test -n "$APK"
           test -s "$APK"
-          file "$APK"
           ls -lh "$APK"
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SirinEngine-APK
