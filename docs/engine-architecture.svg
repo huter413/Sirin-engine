@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+  <rect width="1200" height="700" fill="#10141b"/>
+  <style>text{font-family:Arial,sans-serif;fill:#fff}.title{font-size:32px;font-weight:700}.box{fill:#1a2330;stroke:#6ea8fe;stroke-width:2}.small{font-size:18px}.sub{font-size:22px;font-weight:700}</style>
+  <text x="60" y="58" class="title">Şirin Engine — Editor / Engine / Android Export</text>
+  <rect x="60" y="95" rx="16" ry="16" width="1080" height="120" class="box"/>
+  <text x="90" y="135" class="sub">Editors</text>
+  <text x="90" y="175" class="small">1D Timeline   •   2D UI   •   3D Scene/Voxel   •   4D Time-aware 3D</text>
+  <rect x="60" y="245" rx="16" ry="16" width="520" height="190" class="box"/>
+  <text x="90" y="285" class="sub">Runtime Engine</text>
+  <text x="90" y="325" class="small">Renderer</text>
+  <text x="90" y="355" class="small">Voxel / World</text>
+  <text x="90" y="385" class="small">Physics / Audio / Input</text>
+  <text x="90" y="415" class="small">Assets / Scene / UI</text>
+  <rect x="620" y="245" rx="16" ry="16" width="520" height="190" class="box"/>
+  <text x="650" y="285" class="sub">Project Format</text>
+  <text x="650" y="325" class="small">project.sr — canonical manifest</text>
+  <text x="650" y="355" class="small">scenes / assets / scripts / worlds / ui</text>
+  <text x="650" y="385" class="small">Template + sample projects</text>
+  <text x="650" y="415" class="small">Compatibility project.json when needed</text>
+  <rect x="60" y="475" rx="16" ry="16" width="1080" height="150" class="box"/>
+  <text x="90" y="515" class="sub">Android Export</text>
+  <text x="90" y="555" class="small">Build APK → Debug/Release → sign with developer keystore → upload APK as GitHub Actions artifact</text>
+  <text x="90" y="590" class="small">The build system uses Android tooling; GitHub provides the CI runner and artifact storage.</text>
+  <path d="M600 215V245" stroke="#6ea8fe" stroke-width="3"/>
+  <path d="M320 435V475" stroke="#6ea8fe" stroke-width="3"/>
+  <path d="M880 435V475" stroke="#6ea8fe" stroke-width="3"/>
+</svg>
